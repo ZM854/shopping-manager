@@ -7,15 +7,20 @@ export function useProducts() {
   const [error, setError] = useState<string | null>(null);
 
   const toggleMark = async (id: number, isMarked: boolean) => {
-    // TODO: rewrite update method with id only
     const productToUpdate = products.find((product) => product.id === id);
+
     if (!productToUpdate) {
       setError("product not found");
       return;
     }
+
     try {
-      console.log(productToUpdate);
-      await updateProduct({ ...productToUpdate, isMarked });
+      const { id: _, ...productData } = {
+        ...productToUpdate,
+        isMarked,
+      };
+
+      await updateProduct(id, productData);
 
       setProducts((prev) =>
         prev.map((product) =>

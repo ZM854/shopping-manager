@@ -1,4 +1,8 @@
-import type { Product } from "../models/product";
+import type {
+  CreateProductRequest,
+  Product,
+  UpdateProductRequest,
+} from "../models/product";
 import { apiFetch } from "./api";
 
 export async function getProducts() {
@@ -9,7 +13,7 @@ export async function getProductById(id: number) {
   return apiFetch<Product>(`/products/${id}`);
 }
 
-export async function postProduct(product: Omit<Product, "id">) {
+export async function postProduct(product: CreateProductRequest) {
   return apiFetch<Product>("/products", {
     method: "POST",
     body: JSON.stringify(product),
@@ -19,9 +23,8 @@ export async function postProduct(product: Omit<Product, "id">) {
   });
 }
 
-// TODO: rewrite methods with id
-export async function updateProduct(product: Product) {
-  return apiFetch<Product>("/products", {
+export async function updateProduct(id: number, product: UpdateProductRequest) {
+  return apiFetch<Product>(`/products/${id}`, {
     method: "PUT",
     body: JSON.stringify(product),
     headers: {
@@ -30,12 +33,8 @@ export async function updateProduct(product: Product) {
   });
 }
 
-export async function deleteProduct(product: Product) {
-  return apiFetch<Product>("/products", {
+export async function deleteProduct(id: number) {
+  return apiFetch<Product>(`/products/${id}`, {
     method: "DELETE",
-    body: JSON.stringify(product),
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
 }

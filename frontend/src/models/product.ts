@@ -5,3 +5,17 @@ export type Product = {
   quantity: number;
   unit: string;
 };
+
+export type CreateProductRequest = {
+  name: string;
+  isMarked: boolean;
+  quantity: number;
+  unit: string;
+};
+
+export type UpdateProductRequest = {
+  name: string;
+  isMarked: boolean;
+  quantity: number;
+  unit: string;
+};
