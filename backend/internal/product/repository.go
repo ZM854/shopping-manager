@@ -17,29 +17,39 @@ func (r *Repository) GetProducts() []Product {
 	return r.products
 }
 
-func (r *Repository) PostProduct(product Product) Product {
-	r.products = append(r.products, product)
-	return product
+func (r *Repository) PostProduct(product CreateProductRequest) Product {
+	newProduct := Product{
+		ID: r.products[len(r.products)-1].ID + 1,
+		Name: product.Name,
+		Quantity: product.Quantity,
+		IsMarked: product.IsMarked,
+		Unit: product.Unit,
+	}
+	r.products = append(r.products, newProduct)
+	return newProduct
 }
 
-func (r *Repository) UpdateProduct(updatedProduct Product) (Product, bool) {
+func (r *Repository) UpdateProduct(id int64, updatedProduct UpdateProductRequest) (Product, bool) {
 	for i, product := range r.products {
-		if product.ID == updatedProduct.ID {
-			r.products[i] = updatedProduct
-			return updatedProduct, true
+		if product.ID == id {
+			r.products[i].IsMarked = updatedProduct.IsMarked
+			r.products[i].Name = updatedProduct.Name
+			r.products[i].Unit = updatedProduct.Unit
+			r.products[i].Quantity = updatedProduct.Quantity
+			return r.products[i], true
 		}
 	}
 	return Product{}, false
 }
 
-func (r *Repository) DeleteProduct(productToDelete Product) (Product, bool) {
+func (r *Repository) DeleteProduct(id int64) (bool) {
 	for i, product := range r.products {
-		if product.ID == productToDelete.ID {
+		if product.ID == id {
 			r.products = append(r.products[:i], r.products[i+1:]...)
-			return productToDelete, true
+			return true
 		}
 	}
-	return Product{}, false
+	return false
 }
 
 func NewRepository() *Repository {

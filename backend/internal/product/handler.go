@@ -41,9 +41,9 @@ func (h *Handler) GetProduct(c *gin.Context) {
 }
 
 func (h *Handler) PostProduct(c *gin.Context) {
-	var product Product
+	var newProduct CreateProductRequest
 
-	err := c.BindJSON(&product)
+	err := c.BindJSON(&newProduct)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -52,14 +52,24 @@ func (h *Handler) PostProduct(c *gin.Context) {
 		return
 	}
 
-	h.repository.PostProduct(product)
+	product := h.repository.PostProduct(newProduct)
 	c.JSON(http.StatusCreated, product)
 }
 
 func (h *Handler) UpdateProduct(c *gin.Context) {
-	var product Product
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 
-	err := c.BindJSON(&product)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid id",
+		})
+		return
+	}
+
+	var updatedProductReq UpdateProductRequest
+
+	err = c.BindJSON(&updatedProductReq)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -68,7 +78,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	updatedProduct, found := h.repository.UpdateProduct(product)
+	updatedProduct, found := h.repository.UpdateProduct(id, updatedProductReq)
 
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -81,19 +91,17 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 }
 
 func (h *Handler) DeleteProduct(c *gin.Context) {
-
-	var product Product
-
-	err := c.BindJSON(&product)
+idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid body",
+			"error": "invalid id",
 		})
 		return
 	}
 
-	deletedProduct, deleted := h.repository.DeleteProduct(product)
+	deleted := h.repository.DeleteProduct(id)
 
 	if !deleted {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -102,7 +110,7 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, deletedProduct)
+	c.Status(http.StatusNoContent)
 }
 
 func NewHandler(repository *Repository) *Handler {
