@@ -1,0 +1,20 @@
+.card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 90%;
+  background-color: var(--bg-alt);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.card_info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.card_controls {
+  display: flex;
+  gap: 16px;
+}

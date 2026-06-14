@@ -1,0 +1,10 @@
+.button {
+  background: var(--accent);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  color: var(--text-on-accent);
+}

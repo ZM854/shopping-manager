@@ -1,27 +1,7 @@
-import ProductCard from "../../components/ProductCard/ProductCard";
-import { useProducts } from "../../hooks/useProducts";
-import cls from "./ProductListPage.module.css";
+import ProductList from "../../components/ProductList/ProductList";
 
 const ProductListPage = () => {
-  const { products, error, toggleMark } = useProducts();
-
-  return (
-    <div className={cls.productList}>
-      <div className={cls.productList}>
-        {error ? (
-          <span>{error}</span>
-        ) : (
-          products.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onMarkChange={toggleMark}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
+  return <ProductList />;
 };
 
 export default ProductListPage;
