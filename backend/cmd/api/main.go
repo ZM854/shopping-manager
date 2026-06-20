@@ -1,15 +1,27 @@
 package main
 
 import (
+	"log"
 	"time"
 
+	"github.com/ZM854/shopping-manager/backend/internal/config"
+	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	repo := product.NewRepository()
+	cfg := config.Load()
+
+	db, err := database.NewPostgres(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+
+	repo := product.NewRepository(db)
 	productHandler := product.NewHandler(repo)
 
 	router := gin.Default()

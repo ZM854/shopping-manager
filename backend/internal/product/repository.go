@@ -1,130 +1,172 @@
 package product
 
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var ErrProductNotFound = errors.New("Product not found")
+
 type Repository struct {
-	products []Product
+	db *pgxpool.Pool
 }
 
-func (r *Repository) GetProduct(id int64) (Product, bool) {
-	for _, product := range r.products {
-		if product.ID == id {
-			return product, true
-		}
+func (r *Repository) GetProduct(ctx context.Context, id int64) (Product, error) {
+	const query = `
+		SELECT id, name, quantity, isMarked, unit
+		FROM products
+		WHERE id = $1
+	`
+	var product Product
+
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&product.ID,
+		&product.Name,
+		&product.Quantity,
+		&product.IsMarked,
+		&product.Unit,
+	)
+	
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Product{}, ErrProductNotFound
 	}
-	return Product{}, false
+
+	if err != nil {
+		return Product{}, err
+	}
+
+	return product, nil
 }
 
-func (r *Repository) GetProducts() []Product {
-	return r.products
+func (r *Repository) GetProducts(ctx context.Context) ([]Product, error) {
+	const query = `
+		SELECT id, name, quantity, isMarked, unit
+		FROM products
+		ORDER BY id
+	`
+	rows, err := r.db.Query(ctx, query)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	products := make([]Product, 0)
+
+	for rows.Next() {
+		var product Product
+
+		err:= rows.Scan(
+			&product.ID,
+			&product.Name,
+			&product.Quantity,
+			&product.IsMarked,
+			&product.Unit,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, product)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return products, nil
 }
 
-func (r *Repository) PostProduct(product CreateProductRequest) Product {
+func (r *Repository) PostProduct(ctx context.Context, product CreateProductRequest) (Product, error) {
+	const query = `
+		INSERT INTO products (
+			name,
+			quantity,
+			isMarked,
+			unit
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`
+
 	newProduct := Product{
-		ID: r.products[len(r.products)-1].ID + 1,
 		Name: product.Name,
 		Quantity: product.Quantity,
 		IsMarked: product.IsMarked,
 		Unit: product.Unit,
 	}
-	r.products = append(r.products, newProduct)
-	return newProduct
-}
-
-func (r *Repository) UpdateProduct(id int64, updatedProduct UpdateProductRequest) (Product, bool) {
-	for i, product := range r.products {
-		if product.ID == id {
-			r.products[i].IsMarked = updatedProduct.IsMarked
-			r.products[i].Name = updatedProduct.Name
-			r.products[i].Unit = updatedProduct.Unit
-			r.products[i].Quantity = updatedProduct.Quantity
-			return r.products[i], true
-		}
+	err := r.db.QueryRow(ctx, query, product.Name, product.Quantity, product.IsMarked, product.Unit).Scan(&newProduct.ID)
+	
+	if err != nil {
+		return Product{}, err
 	}
-	return Product{}, false
+	
+	return newProduct, nil
 }
 
-func (r *Repository) DeleteProduct(id int64) (bool) {
-	for i, product := range r.products {
-		if product.ID == id {
-			r.products = append(r.products[:i], r.products[i+1:]...)
-			return true
-		}
+func (r *Repository) UpdateProduct(ctx context.Context, id int64, updatedProduct UpdateProductRequest) (Product, error) {
+	const query = `
+		UPDATE products
+		SET
+			name = $2,
+			quantity = $3,
+			isMarked = $4,
+			unit = $5
+		WHERE id = $1
+		RETURNING id, name, quantity, isMarked, unit
+	`
+	var product Product
+
+	err := r.db.QueryRow(
+		ctx, 
+		query, 
+		id, 
+		updatedProduct.Name, 
+		updatedProduct.Quantity, 
+		updatedProduct.IsMarked, 
+		updatedProduct.Unit,
+	).Scan(
+		&product.ID,
+		&product.Name,
+		&product.Quantity,
+		&product.IsMarked,
+		&product.Unit,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Product{}, ErrProductNotFound
 	}
-	return false
+
+	if err != nil {
+		return Product{}, err
+	}
+
+	return Product{}, nil
 }
 
-func NewRepository() *Repository {
+func (r *Repository) DeleteProduct(ctx context.Context, id int64) (error) {
+	const query = `
+		DELETE FROM products
+		WHERE id = $1
+	`
+	tag, err := r.db.Exec(ctx, query, id)
+
+	if err != nil {
+		return err
+	}
+
+	if tag.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+
+	return nil
+}
+
+func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{
-		products: []Product{
-			{
-				ID:       1,
-				Name:     "Молоко",
-				IsMarked: false,
-				Quantity: 1,
-				Unit:     "л",
-			},
-			{
-				ID:       2,
-				Name:     "Хлеб",
-				IsMarked: false,
-				Quantity: 1,
-				Unit:     "шт",
-			},
-			{
-				ID:       3,
-				Name:     "Яйца",
-				IsMarked: false,
-				Quantity: 10,
-				Unit:     "шт",
-			},
-			{
-				ID:       4,
-				Name:     "Яблоки",
-				IsMarked: false,
-				Quantity: 1.5,
-				Unit:     "кг",
-			},
-			{
-				ID:       5,
-				Name:     "Сыр",
-				IsMarked: false,
-				Quantity: 300,
-				Unit:     "г",
-			},
-			{
-				ID:       6,
-				Name:     "Куриное филе",
-				IsMarked: false,
-				Quantity: 500,
-				Unit:     "г",
-			},
-			{
-				ID:       7,
-				Name:     "Картофель",
-				IsMarked: false,
-				Quantity: 2,
-				Unit:     "кг",
-			},
-			{
-				ID:       8,
-				Name:     "Лук",
-				IsMarked: false,
-				Quantity: 3,
-				Unit:     "шт",
-			},
-			{
-				ID:       9,
-				Name:     "Масло сливочное",
-				IsMarked: false,
-				Quantity: 180,
-				Unit:     "г",
-			},
-			{
-				ID:       10,
-				Name:     "Гречка",
-				IsMarked: false,
-				Quantity: 800,
-				Unit:     "г",
-			},
-		},
+		db: db,
 	}
 }

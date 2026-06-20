@@ -1,6 +1,7 @@
 package product
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -12,7 +13,13 @@ type Handler struct {
 }
 
 func (h *Handler) GetProducts(c *gin.Context) {
-	products := h.repository.GetProducts()
+	products, err := h.repository.GetProducts(c.Request.Context())
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get products",
+		})
+	}
 	c.JSON(http.StatusOK, products)
 }
 
@@ -27,13 +34,19 @@ func (h *Handler) GetProduct(c *gin.Context) {
 		return
 	}
 
-	product, found := h.repository.GetProduct(id)
+	product, err := h.repository.GetProduct(c.Request.Context(), id)
 
-	if !found {
+	if errors.Is(err, ErrProductNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "product not found",
 		})
 		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get product",
+		})
 	}
 
 	c.JSON(http.StatusOK, product)
@@ -43,7 +56,7 @@ func (h *Handler) GetProduct(c *gin.Context) {
 func (h *Handler) PostProduct(c *gin.Context) {
 	var newProduct CreateProductRequest
 
-	err := c.BindJSON(&newProduct)
+	err := c.ShouldBindJSON(&newProduct)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -52,7 +65,14 @@ func (h *Handler) PostProduct(c *gin.Context) {
 		return
 	}
 
-	product := h.repository.PostProduct(newProduct)
+	product, err := h.repository.PostProduct(c.Request.Context(), newProduct)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to post product",
+		})
+	}
+
 	c.JSON(http.StatusCreated, product)
 }
 
@@ -69,7 +89,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 
 	var updatedProductReq UpdateProductRequest
 
-	err = c.BindJSON(&updatedProductReq)
+	err = c.ShouldBindJSON(&updatedProductReq)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -78,20 +98,26 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	updatedProduct, found := h.repository.UpdateProduct(id, updatedProductReq)
+	updatedProduct, err := h.repository.UpdateProduct(c.Request.Context(), id, updatedProductReq)
 
-	if !found {
+	if errors.Is(err, ErrProductNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "error while updating product",
+			"error": "product not found",
 		})
 		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to update product",
+		})
 	}
 
 	c.JSON(http.StatusOK, updatedProduct)
 }
 
 func (h *Handler) DeleteProduct(c *gin.Context) {
-idStr := c.Param("id")
+	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 
 	if err != nil {
@@ -101,13 +127,19 @@ idStr := c.Param("id")
 		return
 	}
 
-	deleted := h.repository.DeleteProduct(id)
+	err = h.repository.DeleteProduct(c.Request.Context(), id)
 
-	if !deleted {
+	if errors.Is(err, ErrProductNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "error while deleting product",
+			"error": "product not found",
 		})
 		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to delete product",
+		})
 	}
 
 	c.Status(http.StatusNoContent)
