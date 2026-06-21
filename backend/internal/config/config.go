@@ -8,6 +8,8 @@ import (
 )
 
 type Config struct {
+	AppENV string
+	ServerPort string
 	DBHost string
 	DBPort string
 	DBUser string
@@ -23,6 +25,8 @@ func Load() Config {
 	}
 
 	return Config{
+		AppENV: os.Getenv("APP_ENV"),
+		ServerPort: os.Getenv("SERVER_PORT"),
 		DBHost: os.Getenv("DB_HOST"),
 		DBPort: os.Getenv("DB_PORT"),
 		DBUser: os.Getenv("DB_USER"),

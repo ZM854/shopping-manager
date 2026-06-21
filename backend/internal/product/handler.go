@@ -2,6 +2,7 @@ package product
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 
 type Handler struct {
 	repository *Repository
+	log *slog.Logger
 }
 
 func (h *Handler) GetProducts(c *gin.Context) {
@@ -145,8 +147,9 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func NewHandler(repository *Repository) *Handler {
+func NewHandler(repository *Repository, log *slog.Logger) *Handler {
 	return &Handler{
 		repository: repository,
+		log: log.With("component", "handler"),
 	}
 }

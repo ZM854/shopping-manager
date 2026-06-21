@@ -1,11 +1,12 @@
 package main
 
 import (
-	"log"
+	"os"
 	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/database"
+	"github.com/ZM854/shopping-manager/backend/internal/logger"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -14,15 +15,27 @@ import (
 func main() {
 	cfg := config.Load()
 
-	db, err := database.NewPostgres(cfg)
+	appEnv := cfg.AppENV
+
+	log := logger.New(appEnv)
+
+	log.Info("starting application", "env", appEnv)
+
+	db, err := database.NewPostgres(cfg, log)
 	if err != nil {
-		log.Fatal(err)
+		log.Error("failed to startup application", "error", err)
+		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() {
+		log.Info("closing postgres connection pool")
+		db.Close()
+	}()
+	
+	log.Info("initializing dependencies")
 
+	repo := product.NewRepository(db, log)
+	productHandler := product.NewHandler(repo, log)
 
-	repo := product.NewRepository(db)
-	productHandler := product.NewHandler(repo)
 
 	router := gin.Default()
 
@@ -53,5 +66,12 @@ func main() {
 	router.PUT("/products/:id", productHandler.UpdateProduct)
 	router.DELETE("/products/:id", productHandler.DeleteProduct)
 
-	router.Run()
+	addr := cfg.ServerPort
+
+	log.Info("http server started", "addres", addr)
+
+	if err := router.Run(addr); err != nil {
+		log.Error("http server stopped", "error", err)
+		os.Exit(1)
+	}
 }
