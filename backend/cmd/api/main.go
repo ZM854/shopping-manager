@@ -7,6 +7,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/logger"
+	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,9 @@ func main() {
 	productHandler := product.NewHandler(repo, log)
 
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(middleware.RequestLogger(log))
 
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{

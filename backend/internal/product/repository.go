@@ -19,7 +19,7 @@ type Repository struct {
 
 func (r *Repository) GetProduct(ctx context.Context, id int64) (Product, error) {
 	const query = `
-		SELECT id, name, quantity, isMarked, unit
+		SELECT id, name, quantity, is_marked, unit
 		FROM products
 		WHERE id = $1
 	`
@@ -52,7 +52,7 @@ func (r *Repository) GetProduct(ctx context.Context, id int64) (Product, error) 
 
 func (r *Repository) GetProducts(ctx context.Context) ([]Product, error) {
 	const query = `
-		SELECT id, name, quantity, isMarked, unit
+		SELECT id, name, quantity, is_marked, unit
 		FROM products
 		ORDER BY id
 	`
@@ -101,7 +101,7 @@ func (r *Repository) PostProduct(ctx context.Context, product CreateProductReque
 		INSERT INTO products (
 			name,
 			quantity,
-			isMarked,
+			is_marked,
 			unit
 		)
 		VALUES ($1, $2, $3, $4)
@@ -135,10 +135,10 @@ func (r *Repository) UpdateProduct(ctx context.Context, id int64, updatedProduct
 		SET
 			name = $2,
 			quantity = $3,
-			isMarked = $4,
+			is_marked = $4,
 			unit = $5
 		WHERE id = $1
-		RETURNING id, name, quantity, isMarked, unit
+		RETURNING id, name, quantity, is_marked, unit
 	`
 
 	start := time.Now()
@@ -172,7 +172,7 @@ func (r *Repository) UpdateProduct(ctx context.Context, id int64, updatedProduct
 
 	r.log.Debug("product updated", "product_id", id, "duration", time.Since(start))
 
-	return Product{}, nil
+	return product, nil
 }
 
 func (r *Repository) DeleteProduct(ctx context.Context, id int64) error {

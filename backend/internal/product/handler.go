@@ -18,9 +18,12 @@ func (h *Handler) GetProducts(c *gin.Context) {
 	products, err := h.repository.GetProducts(c.Request.Context())
 
 	if err != nil {
+		h.log.Error("failed to get products", "error", err)
+
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to get products",
 		})
+		return
 	}
 	c.JSON(http.StatusOK, products)
 }
@@ -46,13 +49,14 @@ func (h *Handler) GetProduct(c *gin.Context) {
 	}
 
 	if err != nil {
+		h.log.Error("failed to get product", "product_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to get product",
 		})
+		return
 	}
 
 	c.JSON(http.StatusOK, product)
-
 }
 
 func (h *Handler) PostProduct(c *gin.Context) {
@@ -70,9 +74,11 @@ func (h *Handler) PostProduct(c *gin.Context) {
 	product, err := h.repository.PostProduct(c.Request.Context(), newProduct)
 
 	if err != nil {
+		h.log.Error("failed to post product", "product_name", newProduct.Name, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to post product",
 		})
+		return
 	}
 
 	c.JSON(http.StatusCreated, product)
@@ -110,9 +116,11 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	}
 
 	if err != nil {
+		h.log.Error("failed to update product", "product_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to update product",
 		})
+		return
 	}
 
 	c.JSON(http.StatusOK, updatedProduct)
@@ -139,9 +147,11 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 	}
 
 	if err != nil {
+		h.log.Error("failed to delete product", "product_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to delete product",
 		})
+		return
 	}
 
 	c.Status(http.StatusNoContent)
