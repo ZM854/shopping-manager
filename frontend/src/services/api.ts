@@ -10,5 +10,8 @@ export async function apiFetch<T>(
     throw new Error("Request failed");
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return response.json();
 }

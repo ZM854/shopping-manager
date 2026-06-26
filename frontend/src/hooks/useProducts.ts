@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import type { Product } from "../models/product";
-import { getProducts, updateProduct } from "../services/productService";
+import type { CreateProductRequest, Product } from "../models/product";
+import {
+  deleteProduct,
+  getProducts,
+  postProduct,
+  updateProduct,
+} from "../services/productService";
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -32,10 +37,31 @@ export function useProducts() {
     }
   };
 
+  const createProduct = async (productData: CreateProductRequest) => {
+    try {
+      const product = await postProduct(productData);
+      setProducts((prev) => [...prev, product]);
+      return product;
+    } catch (error) {
+      setError("failed to create product");
+      throw error;
+    }
+  };
+
+  const removeProduct = async (id: number) => {
+    try {
+      await deleteProduct(id);
+      setProducts((prev) => prev.filter((product) => product.id !== id));
+    } catch (error) {
+      setError("failed to delete product");
+      throw error;
+    }
+  };
+
   useEffect(() => {
     getProducts()
       .then(setProducts)
-      .catch(() => setError("Ошибка загрузки данных"))
+      .catch(() => setError("failed to load products"))
       .finally();
   }, []);
 
@@ -43,5 +69,7 @@ export function useProducts() {
     products,
     error,
     toggleMark,
+    createProduct,
+    removeProduct,
   };
 }

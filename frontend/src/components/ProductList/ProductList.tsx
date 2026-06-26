@@ -1,10 +1,20 @@
-import { useProducts } from "../../hooks/useProducts";
+import type { Product } from "../../models/product";
 import ProductCard from "../ProductCard/ProductCard";
 import cls from "./ProductList.module.css";
 
-const ProductList = () => {
-  const { products, error, toggleMark } = useProducts();
+type ProductListProps = {
+  products: Product[];
+  toggleMark: (id: number, isMarked: boolean) => void;
+  removeProduct: (id: number) => void;
+  error: string | null;
+};
 
+const ProductList = ({
+  products,
+  toggleMark,
+  error,
+  removeProduct,
+}: ProductListProps) => {
   return (
     <div className={cls.product_list}>
       {error ? (
@@ -15,6 +25,7 @@ const ProductList = () => {
             key={product.id}
             product={product}
             onMarkChange={toggleMark}
+            removeProduct={removeProduct}
           />
         ))
       )}

@@ -8,7 +8,6 @@ export type Product = {
 
 export type CreateProductRequest = {
   name: string;
-  isMarked: boolean;
   quantity: number;
   unit: string;
 };

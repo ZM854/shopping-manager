@@ -7,9 +7,14 @@ import cls from "./ProductCard.module.css";
 type ProductCardProps = {
   product: Product;
   onMarkChange: (id: number, isMarked: boolean) => void;
+  removeProduct: (id: number) => void;
 };
 
-const ProductCard = ({ product, onMarkChange }: ProductCardProps) => {
+const ProductCard = ({
+  product,
+  onMarkChange,
+  removeProduct,
+}: ProductCardProps) => {
   return (
     <div className={cls.card}>
       <div className={cls.card_info}>
@@ -30,11 +35,11 @@ const ProductCard = ({ product, onMarkChange }: ProductCardProps) => {
         </div>
       </div>
       <div className={cls.card_controls}>
-        <ActionButton>
-          <DeleteIcon size="24" />
+        <ActionButton onClick={() => removeProduct(product.id)}>
+          <DeleteIcon className={cls.icon} />
         </ActionButton>
         <ActionButton>
-          <EditIcon size="24" />
+          <EditIcon className={cls.icon} />
         </ActionButton>
       </div>
     </div>
