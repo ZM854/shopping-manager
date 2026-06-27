@@ -6,12 +6,14 @@ import cls from "./ProductCard.module.css";
 
 type ProductCardProps = {
   product: Product;
+  editProduct: (product: Product) => void;
   updateProduct: (id: number, ProductData: UpdateProductRequest) => void;
   deleteProduct: (id: number) => void;
 };
 
 const ProductCard = ({
   product,
+  editProduct,
   updateProduct,
   deleteProduct,
 }: ProductCardProps) => {
@@ -41,7 +43,7 @@ const ProductCard = ({
         <ActionButton onClick={() => deleteProduct(product.id)}>
           <DeleteIcon className={cls.icon} />
         </ActionButton>
-        <ActionButton>
+        <ActionButton onClick={() => editProduct(product)}>
           <EditIcon className={cls.icon} />
         </ActionButton>
       </div>

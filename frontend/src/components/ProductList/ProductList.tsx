@@ -4,6 +4,7 @@ import cls from "./ProductList.module.css";
 
 type ProductListProps = {
   products: Product[];
+  editProduct: (product: Product) => void;
   updateProduct: (id: number, productData: UpdateProductRequest) => void;
   deleteProduct: (id: number) => void;
   error: string | null;
@@ -11,9 +12,10 @@ type ProductListProps = {
 
 const ProductList = ({
   products,
+  editProduct,
   updateProduct,
+  deleteProduct,
   error,
-  deleteProduct: deleteProduct,
 }: ProductListProps) => {
   return (
     <div className={cls.product_list}>
@@ -24,6 +26,7 @@ const ProductList = ({
           <ProductCard
             key={product.id}
             product={product}
+            editProduct={editProduct}
             updateProduct={updateProduct}
             deleteProduct={deleteProduct}
           />

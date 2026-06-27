@@ -32,7 +32,7 @@
   --text-secondary: #6b7280;
 
   --base-font-size: 18px;
-
+  --overlay-bg: rgba(0, 0, 0, 0.6);
   --fs-h1: 4rem;
   --fs-h2: 2.6rem;
   --fs-h3: 1.5rem;
