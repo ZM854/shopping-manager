@@ -1,45 +1,18 @@
 import { useEffect, useState } from "react";
-import type { CreateProductRequest, Product } from "../models/product";
-import {
-  deleteProduct,
-  getProducts,
-  postProduct,
-  updateProduct,
-} from "../services/productService";
+import type {
+  CreateProductRequest,
+  Product,
+  UpdateProductRequest,
+} from "../models/product";
+import ProductService from "../services/productService";
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const toggleMark = async (id: number, isMarked: boolean) => {
-    const productToUpdate = products.find((product) => product.id === id);
-
-    if (!productToUpdate) {
-      setError("product not found");
-      return;
-    }
-
-    try {
-      const { id: _, ...productData } = {
-        ...productToUpdate,
-        isMarked,
-      };
-
-      await updateProduct(id, productData);
-
-      setProducts((prev) =>
-        prev.map((product) =>
-          product.id === id ? { ...product, isMarked } : product,
-        ),
-      );
-    } catch (e) {
-      console.log(e);
-    }
-  };
-
   const createProduct = async (productData: CreateProductRequest) => {
     try {
-      const product = await postProduct(productData);
+      const product = await ProductService.postProduct(productData);
       setProducts((prev) => [...prev, product]);
       return product;
     } catch (error) {
@@ -48,9 +21,36 @@ export function useProducts() {
     }
   };
 
-  const removeProduct = async (id: number) => {
+  const updateProduct = async (
+    id: number,
+    productData: UpdateProductRequest,
+  ) => {
+    const productToUpdate = products.find((product) => product.id === id);
+
+    if (!productToUpdate) {
+      setError("product not found");
+      return;
+    }
+
     try {
-      await deleteProduct(id);
+      const updatedProduct = await ProductService.updateProduct(
+        id,
+        productData,
+      );
+
+      setProducts((prev) =>
+        prev.map((product) =>
+          product.id === id ? { ...updatedProduct } : product,
+        ),
+      );
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  const deleteProduct = async (id: number) => {
+    try {
+      await ProductService.deleteProduct(id);
       setProducts((prev) => prev.filter((product) => product.id !== id));
     } catch (error) {
       setError("failed to delete product");
@@ -59,7 +59,7 @@ export function useProducts() {
   };
 
   useEffect(() => {
-    getProducts()
+    ProductService.getProducts()
       .then(setProducts)
       .catch(() => setError("failed to load products"))
       .finally();
@@ -68,8 +68,8 @@ export function useProducts() {
   return {
     products,
     error,
-    toggleMark,
     createProduct,
-    removeProduct,
+    updateProduct,
+    deleteProduct,
   };
 }

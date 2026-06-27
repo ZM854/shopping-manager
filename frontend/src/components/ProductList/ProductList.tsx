@@ -1,19 +1,19 @@
-import type { Product } from "../../models/product";
+import type { Product, UpdateProductRequest } from "../../models/product";
 import ProductCard from "../ProductCard/ProductCard";
 import cls from "./ProductList.module.css";
 
 type ProductListProps = {
   products: Product[];
-  toggleMark: (id: number, isMarked: boolean) => void;
-  removeProduct: (id: number) => void;
+  updateProduct: (id: number, productData: UpdateProductRequest) => void;
+  deleteProduct: (id: number) => void;
   error: string | null;
 };
 
 const ProductList = ({
   products,
-  toggleMark,
+  updateProduct,
   error,
-  removeProduct,
+  deleteProduct: deleteProduct,
 }: ProductListProps) => {
   return (
     <div className={cls.product_list}>
@@ -24,8 +24,8 @@ const ProductList = ({
           <ProductCard
             key={product.id}
             product={product}
-            onMarkChange={toggleMark}
-            removeProduct={removeProduct}
+            updateProduct={updateProduct}
+            deleteProduct={deleteProduct}
           />
         ))
       )}

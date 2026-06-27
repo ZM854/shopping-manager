@@ -1,4 +1,4 @@
-import type { Product } from "../../models/product";
+import type { Product, UpdateProductRequest } from "../../models/product";
 import ActionButton from "../UI/button/ActionButton/ActionButton";
 import DeleteIcon from "../UI/svg/DeleteIcon/DeleteIcon";
 import EditIcon from "../UI/svg/EditIcon/EditIcon";
@@ -6,14 +6,14 @@ import cls from "./ProductCard.module.css";
 
 type ProductCardProps = {
   product: Product;
-  onMarkChange: (id: number, isMarked: boolean) => void;
-  removeProduct: (id: number) => void;
+  updateProduct: (id: number, ProductData: UpdateProductRequest) => void;
+  deleteProduct: (id: number) => void;
 };
 
 const ProductCard = ({
   product,
-  onMarkChange,
-  removeProduct,
+  updateProduct,
+  deleteProduct,
 }: ProductCardProps) => {
   return (
     <div className={cls.card}>
@@ -24,7 +24,10 @@ const ProductCard = ({
           id={`${product.id}`}
           checked={product.isMarked}
           onChange={(e) => {
-            onMarkChange(product.id, e.target.checked);
+            updateProduct(product.id, {
+              ...product,
+              isMarked: e.target.checked,
+            });
           }}
         />
         <div>
@@ -35,7 +38,7 @@ const ProductCard = ({
         </div>
       </div>
       <div className={cls.card_controls}>
-        <ActionButton onClick={() => removeProduct(product.id)}>
+        <ActionButton onClick={() => deleteProduct(product.id)}>
           <DeleteIcon className={cls.icon} />
         </ActionButton>
         <ActionButton>

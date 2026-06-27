@@ -5,7 +5,7 @@ import { useProducts } from "../../hooks/useProducts";
 import cls from "./ProductListPage.module.css";
 
 const ProductListPage = () => {
-  const { products, error, toggleMark, createProduct, removeProduct } =
+  const { products, error, createProduct, updateProduct, deleteProduct } =
     useProducts();
 
   return (
@@ -13,8 +13,8 @@ const ProductListPage = () => {
       <ProductList
         products={products}
         error={error}
-        toggleMark={toggleMark}
-        removeProduct={removeProduct}
+        updateProduct={updateProduct}
+        deleteProduct={deleteProduct}
       />
       <ActionButton
         onClick={() =>

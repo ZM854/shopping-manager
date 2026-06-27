@@ -5,36 +5,38 @@ import type {
 } from "../models/product";
 import { apiFetch } from "./api";
 
-export async function getProducts() {
-  return apiFetch<Product[]>("/products");
-}
+export default class ProductService {
+  static async getProducts() {
+    return apiFetch<Product[]>("/products");
+  }
 
-export async function getProductById(id: number) {
-  return apiFetch<Product>(`/products/${id}`);
-}
+  static async getProductById(id: number) {
+    return apiFetch<Product>(`/products/${id}`);
+  }
 
-export async function postProduct(product: CreateProductRequest) {
-  return apiFetch<Product>("/products", {
-    method: "POST",
-    body: JSON.stringify(product),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-}
+  static async postProduct(product: CreateProductRequest) {
+    return apiFetch<Product>("/products", {
+      method: "POST",
+      body: JSON.stringify(product),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  }
 
-export async function updateProduct(id: number, product: UpdateProductRequest) {
-  return apiFetch<Product>(`/products/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(product),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-}
+  static async updateProduct(id: number, product: UpdateProductRequest) {
+    return apiFetch<Product>(`/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(product),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  }
 
-export async function deleteProduct(id: number) {
-  return apiFetch<Product>(`/products/${id}`, {
-    method: "DELETE",
-  });
+  static async deleteProduct(id: number) {
+    return apiFetch<Product>(`/products/${id}`, {
+      method: "DELETE",
+    });
+  }
 }
