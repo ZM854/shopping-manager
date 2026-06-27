@@ -6,8 +6,9 @@ import Modal from "../../components/UI/modal/Modal/Modal";
 import AddIcon from "../../components/UI/svg/AddIcon/AddIcon";
 import { useModal } from "../../hooks/useModal";
 import { useProducts } from "../../hooks/useProducts";
-import type { Product, UpdateProductRequest } from "../../models/product";
+import type { Product } from "../../models/product";
 import cls from "./ProductListPage.module.css";
+import type { ProductFormData } from "../../components/ProductForm/ProductForm.types";
 
 const ProductListPage = () => {
   const { products, error, createProduct, updateProduct, deleteProduct } =
@@ -20,13 +21,32 @@ const ProductListPage = () => {
     modal.open();
   };
 
+  const handleCreate = () => {
+    setEditingProduct(null);
+    modal.open();
+  };
+
   const handleModalClose = () => {
     setEditingProduct(null);
     modal.close();
   };
 
-  const handleFormSave = async (productData: UpdateProductRequest) => {
-    await updateProduct(editingProduct?.id, productData);
+  const handleFormSave = async (productData: ProductFormData) => {
+    if (editingProduct) {
+      await updateProduct(editingProduct.id, {
+        name: productData.name,
+        quantity: productData.quantity,
+        unit: productData.unit,
+        isMarked: productData.isMarked,
+      });
+    } else {
+      await createProduct({
+        name: productData.name,
+        quantity: productData.quantity,
+        unit: productData.unit,
+      });
+    }
+    setEditingProduct(null);
     modal.close();
   };
 
@@ -39,15 +59,7 @@ const ProductListPage = () => {
         updateProduct={updateProduct}
         deleteProduct={deleteProduct}
       />
-      <ActionButton
-        onClick={() =>
-          createProduct({
-            name: "duncan",
-            quantity: 1,
-            unit: "football fields",
-          })
-        }
-      >
+      <ActionButton onClick={handleCreate}>
         <AddIcon className={cls.addIcon} />
       </ActionButton>
 

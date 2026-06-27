@@ -1,14 +1,17 @@
 import { useState } from "react";
-import type { Product, UpdateProductRequest } from "../../models/product";
+import type { Product } from "../../models/product";
 import cls from "./ProductForm.module.css";
+import type { ProductFormData } from "./ProductForm.types";
 
 type ProductFormProps = {
-  product: Product;
-  onSave: (productData: UpdateProductRequest) => void;
+  product: Product | null;
+  onSave: (productData: ProductFormData) => void;
 };
 
 const ProductForm = ({ product, onSave }: ProductFormProps) => {
-  const [formData, setFormData] = useState(product);
+  const [formData, setFormData] = useState<ProductFormData>(
+    product ? product : { name: "", quantity: 0, unit: "", isMarked: false },
+  );
 
   const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
@@ -46,13 +49,16 @@ const ProductForm = ({ product, onSave }: ProductFormProps) => {
           setFormData((prev) => ({ ...prev, unit: e.target.value }))
         }
       />
-      <input
-        type="checkbox"
-        checked={formData.isMarked}
-        onChange={(e) =>
-          setFormData((prev) => ({ ...prev, isMarked: e.target.checked }))
-        }
-      />
+      {product && (
+        <input
+          type="checkbox"
+          checked={formData.isMarked}
+          onChange={(e) =>
+            setFormData((prev) => ({ ...prev, isMarked: e.target.checked }))
+          }
+        />
+      )}
+
       <input type="submit" value="Сохранить" />
     </form>
   );
