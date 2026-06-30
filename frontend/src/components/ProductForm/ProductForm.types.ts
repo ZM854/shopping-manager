@@ -1,6 +1,6 @@
 export type ProductFormData = {
   name: string;
-  quantity: number;
+  quantity: string;
   unit: string;
   isMarked: boolean;
 };

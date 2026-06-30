@@ -23,13 +23,13 @@
 }
 
 :root {
-  --bg: #faf3e1;
-  --bg-alt: #f5e7c6;
-  --accent: #ff6d1f;
-
-  --text: #222222;
-  --text-on-accent: #fff;
-  --text-secondary: #6b7280;
+  --bg: #fefefe;
+  --accent: #629838;
+  --surface: #d7e3c0;
+  --surface-alt: #e7eaeb;
+  --text: #21282b;
+  --text-on-accent: #fefefe;
+  --text-secondary: #959ca4;
 
   --base-font-size: 18px;
   --overlay-bg: rgba(0, 0, 0, 0.6);
@@ -117,6 +117,16 @@ select {
   border: none;
   outline: none;
   cursor: pointer;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
 }
 
 img,

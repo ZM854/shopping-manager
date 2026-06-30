@@ -1,65 +1,91 @@
 import { useState } from "react";
-import type { Product } from "../../models/product";
+import type { Product, UpdateProductRequest } from "../../models/product";
 import cls from "./ProductForm.module.css";
 import type { ProductFormData } from "./ProductForm.types";
+import Checkbox from "../UI/input/Checkbox/Checkbox";
+import TextField from "../UI/input/TextInput/TextField";
+import Button from "../UI/button/Button/Button";
 
 type ProductFormProps = {
   product: Product | null;
-  onSave: (productData: ProductFormData) => void;
+  onSave: (productData: UpdateProductRequest) => void;
 };
 
 const ProductForm = ({ product, onSave }: ProductFormProps) => {
   const [formData, setFormData] = useState<ProductFormData>(
-    product ? product : { name: "", quantity: 0, unit: "", isMarked: false },
+    product
+      ? { ...product, quantity: product.quantity.toString() }
+      : {
+          name: "",
+          quantity: "",
+          unit: "",
+          isMarked: false,
+        },
   );
 
   const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      return;
-    }
-    onSave({
-      name: formData.name,
-      quantity: formData.quantity,
-      isMarked: formData.isMarked,
-      unit: formData.unit,
-    });
+
+    if (!formData.name.trim()) return;
+
+    onSave({ ...formData, quantity: Number(formData.quantity) });
   };
 
   return (
     <form className={cls.form} onSubmit={handleSubmit}>
-      <input
-        type="text"
+      <TextField
+        label="Название"
         value={formData.name}
+        placeholder="Например, Молоко"
+        required
         onChange={(e) =>
-          setFormData((prev) => ({ ...prev, name: e.target.value }))
+          setFormData((prev) => ({
+            ...prev,
+            name: e.target.value,
+          }))
         }
       />
-      <input
+
+      <TextField
+        label="Количество"
         type="number"
+        step="any"
+        min={0}
         value={formData.quantity}
         onChange={(e) =>
-          setFormData((prev) => ({ ...prev, quantity: Number(e.target.value) }))
+          setFormData((prev) => ({
+            ...prev,
+            quantity: e.target.value,
+          }))
         }
       />
-      <input
-        type="text"
+
+      <TextField
+        label="Единица измерения"
+        placeholder="шт., кг, л..."
         value={formData.unit}
         onChange={(e) =>
-          setFormData((prev) => ({ ...prev, unit: e.target.value }))
+          setFormData((prev) => ({
+            ...prev,
+            unit: e.target.value,
+          }))
         }
       />
+
       {product && (
-        <input
-          type="checkbox"
+        <Checkbox
+          label="Отметить как купленный"
           checked={formData.isMarked}
           onChange={(e) =>
-            setFormData((prev) => ({ ...prev, isMarked: e.target.checked }))
+            setFormData((prev) => ({
+              ...prev,
+              isMarked: e.target.checked,
+            }))
           }
         />
       )}
 
-      <input type="submit" value="Сохранить" />
+      <Button type="submit">Сохранить</Button>
     </form>
   );
 };

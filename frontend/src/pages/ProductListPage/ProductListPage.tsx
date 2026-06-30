@@ -1,14 +1,13 @@
 import { useState } from "react";
 import ProductForm from "../../components/ProductForm/ProductForm";
 import ProductList from "../../components/ProductList/ProductList";
-import ActionButton from "../../components/UI/button/ActionButton/ActionButton";
+import IconButton from "../../components/UI/button/ActionButton/IconButton";
 import Modal from "../../components/UI/modal/Modal/Modal";
 import AddIcon from "../../components/UI/svg/AddIcon/AddIcon";
 import { useModal } from "../../hooks/useModal";
 import { useProducts } from "../../hooks/useProducts";
-import type { Product } from "../../models/product";
+import type { Product, UpdateProductRequest } from "../../models/product";
 import cls from "./ProductListPage.module.css";
-import type { ProductFormData } from "../../components/ProductForm/ProductForm.types";
 
 const ProductListPage = () => {
   const { products, error, createProduct, updateProduct, deleteProduct } =
@@ -31,7 +30,7 @@ const ProductListPage = () => {
     modal.close();
   };
 
-  const handleFormSave = async (productData: ProductFormData) => {
+  const handleFormSave = async (productData: UpdateProductRequest) => {
     if (editingProduct) {
       await updateProduct(editingProduct.id, {
         name: productData.name,
@@ -59,9 +58,9 @@ const ProductListPage = () => {
         updateProduct={updateProduct}
         deleteProduct={deleteProduct}
       />
-      <ActionButton onClick={handleCreate}>
+      <IconButton onClick={handleCreate}>
         <AddIcon className={cls.addIcon} />
-      </ActionButton>
+      </IconButton>
 
       <Modal isOpen={modal.isOpen} onClose={handleModalClose}>
         <ProductForm product={editingProduct} onSave={handleFormSave} />

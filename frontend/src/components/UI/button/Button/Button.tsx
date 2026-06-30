@@ -1,11 +1,11 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import cls from "./ActionButton.module.css";
+import cls from "./Button.module.css";
 
-type ActionButtonProps = {
+type ButtonProps = {
   children: ReactNode;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
-const ActionButton = ({ children, ...props }: ActionButtonProps) => {
+const Button = ({ children, ...props }: ButtonProps) => {
   return (
     <button className={cls.button} {...props}>
       {children}
@@ -13,4 +13,4 @@ const ActionButton = ({ children, ...props }: ActionButtonProps) => {
   );
 };
 
-export default ActionButton;
+export default Button;

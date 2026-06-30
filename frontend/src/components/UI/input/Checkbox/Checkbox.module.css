@@ -1,0 +1,47 @@
+.container {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+
+  cursor: pointer;
+
+  user-select: none;
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+}
+
+.box {
+  width: 24px;
+  height: 24px;
+
+  border-radius: 0.3rem;
+
+  border: 2px solid var(--text-secondary);
+
+  background: var(--bg);
+
+  transition: 0.2s;
+}
+
+.icon {
+  color: var(--text-on-accent);
+  opacity: 0;
+  transition: 0.15s;
+}
+
+.input:checked + .box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.input:checked + .box .icon {
+  opacity: 1;
+}
+
+.input:focus-visible + .box {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

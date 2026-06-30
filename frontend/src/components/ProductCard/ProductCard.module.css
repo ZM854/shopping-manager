@@ -3,7 +3,7 @@
   justify-content: space-between;
   align-items: center;
   width: 90%;
-  background-color: var(--bg-alt);
+  background-color: var(--surface);
   border-radius: 16px;
   padding: 16px;
 }

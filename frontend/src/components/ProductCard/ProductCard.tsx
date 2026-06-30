@@ -1,5 +1,6 @@
 import type { Product, UpdateProductRequest } from "../../models/product";
-import ActionButton from "../UI/button/ActionButton/ActionButton";
+import IconButton from "../UI/button/ActionButton/IconButton";
+import Checkbox from "../UI/input/Checkbox/Checkbox";
 import DeleteIcon from "../UI/svg/DeleteIcon/DeleteIcon";
 import EditIcon from "../UI/svg/EditIcon/EditIcon";
 import cls from "./ProductCard.module.css";
@@ -20,8 +21,8 @@ const ProductCard = ({
   return (
     <div className={cls.card}>
       <div className={cls.card_info}>
-        <input
-          type="checkbox"
+        <Checkbox
+          label=""
           name="isMarked"
           id={`${product.id}`}
           checked={product.isMarked}
@@ -32,6 +33,7 @@ const ProductCard = ({
             });
           }}
         />
+
         <div>
           <h3>{product.name}</h3>
           <span>
@@ -40,12 +42,12 @@ const ProductCard = ({
         </div>
       </div>
       <div className={cls.card_controls}>
-        <ActionButton onClick={() => deleteProduct(product.id)}>
+        <IconButton onClick={() => deleteProduct(product.id)}>
           <DeleteIcon className={cls.icon} />
-        </ActionButton>
-        <ActionButton onClick={() => editProduct(product)}>
+        </IconButton>
+        <IconButton onClick={() => editProduct(product)}>
           <EditIcon className={cls.icon} />
-        </ActionButton>
+        </IconButton>
       </div>
     </div>
   );
