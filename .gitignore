@@ -6,6 +6,7 @@ frontend/dist-ssr/
 # Backend
 backend/bin/
 backend/build/
+backend/tmp
 
 *.exe
 *.exe~

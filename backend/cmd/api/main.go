@@ -2,15 +2,13 @@ package main
 
 import (
 	"os"
-	"time"
 
+	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/logger"
-	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"github.com/ZM854/shopping-manager/backend/internal/router"
 )
 
 func main() {
@@ -36,38 +34,9 @@ func main() {
 
 	repo := product.NewRepository(db, log)
 	productHandler := product.NewHandler(repo, log)
+	authHandler := auth.NewAuthHandler(log)
 
-
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(middleware.RequestLogger(log))
-
-	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:5173",
-		},
-		AllowMethods: []string{
-			"GET",
-			"POST",
-			"PUT",
-			"PATCH",
-			"DELETE",
-			"OPTIONS",
-		},
-		AllowHeaders: []string{
-			"Origin",
-			"Content-Type",
-			"Accept",
-			"Authorization",
-		},
-		MaxAge: 12 * time.Hour,
-	}))
-
-	router.GET("/products", productHandler.GetProducts)
-	router.GET("/products/:id", productHandler.GetProduct)
-	router.POST("/products", productHandler.PostProduct)
-	router.PUT("/products/:id", productHandler.UpdateProduct)
-	router.DELETE("/products/:id", productHandler.DeleteProduct)
+	router := router.New(log, productHandler, authHandler)
 
 	addr := cfg.ServerPort
 

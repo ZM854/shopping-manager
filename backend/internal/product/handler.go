@@ -9,12 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Handler struct {
-	repository *Repository
+type PrductHandler struct {
+	repository *ProductRepository
 	log *slog.Logger
 }
 
-func (h *Handler) GetProducts(c *gin.Context) {
+func (h *PrductHandler) GetProducts(c *gin.Context) {
 	products, err := h.repository.GetProducts(c.Request.Context())
 
 	if err != nil {
@@ -28,7 +28,7 @@ func (h *Handler) GetProducts(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
-func (h *Handler) GetProduct(c *gin.Context) {
+func (h *PrductHandler) GetProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 
@@ -59,7 +59,7 @@ func (h *Handler) GetProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
-func (h *Handler) PostProduct(c *gin.Context) {
+func (h *PrductHandler) PostProduct(c *gin.Context) {
 	var newProduct CreateProductRequest
 
 	err := c.ShouldBindJSON(&newProduct)
@@ -84,7 +84,7 @@ func (h *Handler) PostProduct(c *gin.Context) {
 	c.JSON(http.StatusCreated, product)
 }
 
-func (h *Handler) UpdateProduct(c *gin.Context) {
+func (h *PrductHandler) UpdateProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 
@@ -126,7 +126,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, updatedProduct)
 }
 
-func (h *Handler) DeleteProduct(c *gin.Context) {
+func (h *PrductHandler) DeleteProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 
@@ -157,9 +157,9 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func NewHandler(repository *Repository, log *slog.Logger) *Handler {
-	return &Handler{
+func NewHandler(repository *ProductRepository, log *slog.Logger) *PrductHandler {
+	return &PrductHandler{
 		repository: repository,
-		log: log.With("component", "handler"),
+		log: log.With("component", "handler", "entity", "product"),
 	}
 }

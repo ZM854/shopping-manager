@@ -12,12 +12,12 @@ import (
 
 var ErrProductNotFound = errors.New("Product not found")
 
-type Repository struct {
+type ProductRepository struct {
 	db *pgxpool.Pool
 	log *slog.Logger
 }
 
-func (r *Repository) GetProduct(ctx context.Context, id int64) (Product, error) {
+func (r *ProductRepository) GetProduct(ctx context.Context, id int64) (Product, error) {
 	const query = `
 		SELECT id, name, quantity, is_marked, unit
 		FROM products
@@ -50,7 +50,7 @@ func (r *Repository) GetProduct(ctx context.Context, id int64) (Product, error) 
 	return product, nil
 }
 
-func (r *Repository) GetProducts(ctx context.Context) ([]Product, error) {
+func (r *ProductRepository) GetProducts(ctx context.Context) ([]Product, error) {
 	const query = `
 		SELECT id, name, quantity, is_marked, unit
 		FROM products
@@ -96,7 +96,7 @@ func (r *Repository) GetProducts(ctx context.Context) ([]Product, error) {
 	return products, nil
 }
 
-func (r *Repository) PostProduct(ctx context.Context, product CreateProductRequest) (Product, error) {
+func (r *ProductRepository) PostProduct(ctx context.Context, product CreateProductRequest) (Product, error) {
 	const query = `
 		INSERT INTO products (
 			name,
@@ -129,7 +129,7 @@ func (r *Repository) PostProduct(ctx context.Context, product CreateProductReque
 	return newProduct, nil
 }
 
-func (r *Repository) UpdateProduct(ctx context.Context, id int64, updatedProduct UpdateProductRequest) (Product, error) {
+func (r *ProductRepository) UpdateProduct(ctx context.Context, id int64, updatedProduct UpdateProductRequest) (Product, error) {
 	const query = `
 		UPDATE products
 		SET
@@ -175,7 +175,7 @@ func (r *Repository) UpdateProduct(ctx context.Context, id int64, updatedProduct
 	return product, nil
 }
 
-func (r *Repository) DeleteProduct(ctx context.Context, id int64) error {
+func (r *ProductRepository) DeleteProduct(ctx context.Context, id int64) error {
 	const query = `
 		DELETE FROM products
 		WHERE id = $1
@@ -200,9 +200,9 @@ func (r *Repository) DeleteProduct(ctx context.Context, id int64) error {
 	return nil
 }
 
-func NewRepository(db *pgxpool.Pool, log *slog.Logger) *Repository {
-	return &Repository{
+func NewRepository(db *pgxpool.Pool, log *slog.Logger) *ProductRepository {
+	return &ProductRepository{
 		db: db,
-		log: log.With("component", "repository"),
+		log: log.With("component", "repository", "entity", "product"),
 	}
 }
