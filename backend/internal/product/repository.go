@@ -190,7 +190,6 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int64) error {
 		return err
 	}
 
-
 	if tag.RowsAffected() == 0 {
 		return ErrProductNotFound
 	}
@@ -200,7 +199,7 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int64) error {
 	return nil
 }
 
-func NewRepository(db *pgxpool.Pool, log *slog.Logger) *ProductRepository {
+func NewProductRepository(db *pgxpool.Pool, log *slog.Logger) *ProductRepository {
 	return &ProductRepository{
 		db: db,
 		log: log.With("component", "repository", "entity", "product"),

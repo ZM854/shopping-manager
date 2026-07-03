@@ -32,9 +32,12 @@ func main() {
 	
 	log.Info("initializing dependencies")
 
-	repo := product.NewRepository(db, log)
-	productHandler := product.NewHandler(repo, log)
-	authHandler := auth.NewAuthHandler(log)
+	productRepo := product.NewProductRepository(db, log)
+	productHandler := product.NewHandler(productRepo, log)
+
+	userRepo := auth.NewUserRepository(db, log)
+	userService := auth.NewUserService(log, userRepo)
+	authHandler := auth.NewAuthHandler(log, userService)
 
 	router := router.New(log, productHandler, authHandler)
 

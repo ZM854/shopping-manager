@@ -1,16 +1,19 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrUserNotFound = errors.New("User not found")
+var ErrUserAlreadyExist = errors.New("User already exist")
+
 
 
 type UserRepository struct {
@@ -18,7 +21,14 @@ type UserRepository struct {
 	log *slog.Logger
 }
 
-func (r *UserRepository) GetByEmail(ctx *gin.Context, email string) (User, error) {
+func NewUserRepository(db *pgxpool.Pool, log *slog.Logger) *UserRepository  {
+	return &UserRepository{
+		db: db,
+		log: log.With("component", "repository", "entity", "user"),
+	}
+}
+
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (User, error) {
 	const query = `
 		SELECT id, email, password_hash, is_email_verified, activation_token
 		FROM users
@@ -60,7 +70,7 @@ func (r *UserRepository) GetByEmail(ctx *gin.Context, email string) (User, error
 	return user, nil
 }
 
-func (r *UserRepository) GetById(ctx *gin.Context, id int64) (User, error) {
+func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 	const query = `
 		SELECT id, email, password_hash, is_email_verified, activation_token
 		FROM users
@@ -101,7 +111,7 @@ func (r *UserRepository) GetById(ctx *gin.Context, id int64) (User, error) {
 	return user, nil
 }
 
-func (r *UserRepository) Create(ctx *gin.Context,  userData CreateUserRequest) (User, error)  {
+func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest) (User, error)  {
 	const query = `
 		INSERT INTO users (
 			email,
@@ -129,6 +139,11 @@ func (r *UserRepository) Create(ctx *gin.Context,  userData CreateUserRequest) (
 	).Scan(&newUser.ID)
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code =="23505" {
+			return User{}, ErrUserAlreadyExist
+		}
+
 		r.log.Error(
 			"failed to create user", 
 			"user_email", userData.Email, 
