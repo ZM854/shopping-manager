@@ -95,7 +95,7 @@ func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 
 	if err != nil {
 		r.log.Error(
-			"failed to get user by email",
+			"failed to get user by id",
 			"user_id", id,
 			"error", err,
 		)
@@ -103,12 +103,98 @@ func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 	}
 
 	r.log.Debug(
-		"get user by email completed",
+		"get user by id completed",
 		"user_id", user.ID,
 		"duration", time.Since(start),
 	)
 
 	return user, nil
+}
+
+func (r *UserRepository) GetByActivationToken(ctx context.Context, token string) (User, error) {
+	const query = `
+		SELECT id, email, password_hash, is_email_verified, activation_token
+		FROM users
+		WHERE activation_token = $1
+	`
+
+	start := time.Now()
+
+	var user User
+
+	err := r.db.QueryRow(ctx, query, token).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.IsEmailVerified,
+		&user.ActivationToken,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUserNotFound
+	}
+
+	if err != nil {
+		r.log.Error(
+			"failed to get user by activation token",
+			"error", err,
+		)
+		return User{}, err
+	}
+
+	r.log.Debug(
+		"get user by activation token completed",
+		"user_id", user.ID,
+		"duration", time.Since(start),
+	)
+
+	return user, nil
+}
+
+func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
+	const query = `
+		SELECT id, email, password_hash, is_email_verified, activation_token
+		FROM users
+		ORDER BY id
+	`
+	start := time.Now()
+
+	rows, err := r.db.Query(ctx, query)
+
+	if err != nil {
+		r.log.Error("failed to get users", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]User, 0)
+
+	for rows.Next() {
+		var user User
+
+		err:= rows.Scan(
+			&user.ID,
+			&user.Email,
+			&user.PasswordHash,
+			&user.IsEmailVerified,
+			&user.ActivationToken,
+		)
+
+		if err != nil {
+			r.log.Error("failed to scan user row", "error", err)
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.log.Error("rows iteration failed")
+		return nil, err
+	}
+
+	r.log.Debug("get users completed", "count", len(users), "duration", time.Since(start))
+
+	return users, nil
 }
 
 func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest) (User, error)  {
@@ -160,3 +246,50 @@ func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest)
 
 	return newUser, nil	
 }
+
+func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserRequest) (User, error) {
+	const query = `
+		UPDATE users
+		SET
+			email = $2,
+			password_hash = $3,
+			is_email_verified = $4,
+			activation_token = $5
+		WHERE id = $1
+		RETURNING id, email, password_hash, is_email_verified, activation_token
+	`
+
+	start := time.Now()
+
+	var user User
+
+	err := r.db.QueryRow(
+		ctx, 
+		query, 
+		id, 
+		req.Email,
+		req.PasswordHash,
+		req.IsEmailVerified,
+		req.ActivationToken,
+	).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.IsEmailVerified,
+		&user.ActivationToken,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUserNotFound
+	}
+
+	if err != nil {
+		r.log.Error("failed to update user", "user_id", id, "error", err)
+		return User{}, err
+	}
+
+	r.log.Debug("user updated", "user_id", id, "duration", time.Since(start))
+
+	return user, nil
+}
+
