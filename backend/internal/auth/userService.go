@@ -6,13 +6,19 @@ import (
 
 type UserService struct {
 	log *slog.Logger
-	repository *UserRepository
+	userRepository *UserRepository
+	tokenService *TokenService
 }
 
-func NewUserService(log *slog.Logger, repository *UserRepository) *UserService {
+func NewUserService(
+	log *slog.Logger, 
+	userRepository *UserRepository,
+	tokenService *TokenService,
+) *UserService {
 	return &UserService{
-		repository: repository,
+		userRepository: userRepository,
 		log: log.With("component", "service", "entity", "user"),
+		tokenService: tokenService,
 	}
 }
 

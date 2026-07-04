@@ -35,8 +35,18 @@ func main() {
 	productRepo := product.NewProductRepository(db, log)
 	productHandler := product.NewHandler(productRepo, log)
 
+	tokenRepo := auth.NewTokenRepository(db, log)
+	tokenService := auth.NewTokenService(
+		log, 
+		tokenRepo, 
+		cfg.JWTAccessSecret, 
+		cfg.JWTRefreshSecret,
+		cfg.JWTAccessTTL,
+		cfg.JWTRefreshTTL,
+	)
+
 	userRepo := auth.NewUserRepository(db, log)
-	userService := auth.NewUserService(log, userRepo)
+	userService := auth.NewUserService(log, userRepo, tokenService)
 	authHandler := auth.NewAuthHandler(log, userService)
 
 	router := router.New(log, productHandler, authHandler)

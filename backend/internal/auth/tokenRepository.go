@@ -51,18 +51,18 @@ func (r *TokenRepository) Save(ctx context.Context, userId int64, tokenHash stri
 	return nil
 }
 
-func (r *TokenRepository) FindByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
+func (r *TokenRepository) FindByUserId(ctx context.Context, userId int64) (RefreshToken, error) {
 	const query = `
 		SELECT id, user_id, token_hash
 		FROM refresh_tokens
-		WHERE token_hash = $1
+		WHERE user_id = $1
 	`
 
 	start := time.Now()
 
 	var token RefreshToken
 
-	err := r.db.QueryRow(ctx, query, tokenHash).Scan(
+	err := r.db.QueryRow(ctx, query, userId).Scan(
 		&token.ID,
 		&token.UserID,
 		&token.TokenHash,
@@ -73,7 +73,7 @@ func (r *TokenRepository) FindByHash(ctx context.Context, tokenHash string) (Ref
 	}
 
 	if err != nil {
-		r.log.Error("failed to find refresh token by hash", "error", err)
+		r.log.Error("failed to find refresh token", "error", err)
 		return RefreshToken{}, err
 	}
 	
@@ -82,18 +82,17 @@ func (r *TokenRepository) FindByHash(ctx context.Context, tokenHash string) (Ref
 	return token, nil
 }
 
-func (r *TokenRepository) DeleteByHash(ctx context.Context, tokenHash string) (error) {
+func (r *TokenRepository) DeleteByUserId(ctx context.Context, userId int64) (error) {
 	const query = `
 		DELETE FROM refresh_tokens
-		WHERE token_hash = $1
+		WHERE user_id = $1
 	`
 	start := time.Now()
 
-
-	tag, err := r.db.Exec(ctx, query, tokenHash)
+	tag, err := r.db.Exec(ctx, query, userId)
 
 	if err != nil {
-		r.log.Error("failed to delete refresh token by hash", "error", err)
+		r.log.Error("failed to delete refresh token", "user_id", userId, "error", err)
 		return err
 	}
 
@@ -101,7 +100,7 @@ func (r *TokenRepository) DeleteByHash(ctx context.Context, tokenHash string) (e
 		return ErrRefreshTokenNotFound
 	}
 	
-	r.log.Debug("refresh token deleted", "duration", time.Since(start))
+	r.log.Debug("refresh token deleted", "user_id", userId, "duration", time.Since(start))
 
 	return nil
 }

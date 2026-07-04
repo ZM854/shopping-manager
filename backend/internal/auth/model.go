@@ -26,3 +26,8 @@ type RefreshToken struct {
     UserID    int64
     TokenHash string
 }
+
+type TokenPair struct {
+    AccesToken string
+    RefreshToken string
+}
