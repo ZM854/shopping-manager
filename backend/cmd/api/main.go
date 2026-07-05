@@ -44,9 +44,17 @@ func main() {
 		cfg.JWTAccessTTL,
 		cfg.JWTRefreshTTL,
 	)
+	
+	mailService := auth.NewMailService(log)
 
 	userRepo := auth.NewUserRepository(db, log)
-	userService := auth.NewUserService(log, userRepo, tokenService)
+	userService := auth.NewUserService(
+		log, 
+		userRepo, 
+		tokenService,
+		mailService,
+		"http://localhost" + cfg.ServerPort + "/activate",
+	)
 	authHandler := auth.NewAuthHandler(log, userService)
 
 	router := router.New(log, productHandler, authHandler)
