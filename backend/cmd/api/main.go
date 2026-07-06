@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
@@ -45,7 +46,26 @@ func main() {
 		cfg.JWTRefreshTTL,
 	)
 	
-	mailService := auth.NewMailService(log)
+	smtpPort, err := strconv.Atoi(cfg.SMTPPort)
+
+	if err != nil {
+		log.Error("invalid smtp port", "port", cfg.SMTPPort)
+		os.Exit(1)
+	}
+
+	mailService, err := auth.NewMailService(
+		log,
+		cfg.SMTPHost,
+		smtpPort,
+		cfg.SMTPUser,
+		cfg.SMTPPassword,
+		cfg.SMTPFrom,
+	)
+
+	if err != nil {
+		log.Error("failed to initialize mail service", "error", err)
+		os.Exit(1)
+	}
 
 	userRepo := auth.NewUserRepository(db, log)
 	userService := auth.NewUserService(

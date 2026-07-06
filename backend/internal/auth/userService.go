@@ -74,6 +74,7 @@ func (s *UserService) Registration(
 	}
 
 	s.mailService.SendActivationMail(
+		ctx,
 		email,
 		fmt.Sprintf(
 			"%s/%s", 
