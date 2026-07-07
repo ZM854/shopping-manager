@@ -2,12 +2,13 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -130,15 +131,8 @@ func (s *TokenService) validateToken(tokenString string, secret []byte) (*TokenC
 }
 
 func (s *TokenService) SaveToken(ctx context.Context, userId int64, refreshToken string) error {
-	hash, err := bcrypt.GenerateFromPassword(
-		[]byte(refreshToken),
-		bcrypt.DefaultCost,
-	)
-
-	if err != nil {
-		s.log.Error("failed to hash refresh token", "user_id", userId, "error", err)
-		return err
-	}
+	sum := sha256.Sum256([]byte(refreshToken))
+ 	hash := hex.EncodeToString(sum[:])
 
 	if err := s.tokenRepository.Save(ctx, userId, string(hash)); err != nil {
 		s.log.Error("failed to save refresh token", "user_id", userId, "error", err)
@@ -169,12 +163,10 @@ func (s *TokenService) FindToken(ctx context.Context, userId int64, refreshToken
 		return nil, err
 	}
 
-	err = bcrypt.CompareHashAndPassword(
-		[]byte(token.TokenHash),
-		[]byte(refreshToken),
-	)
+	sum := sha256.Sum256([]byte(refreshToken))
+ 	hash := hex.EncodeToString(sum[:])
 
-	if err != nil {
+	if hash != token.TokenHash {
 		return nil, ErrInvalidToken
 	}
 

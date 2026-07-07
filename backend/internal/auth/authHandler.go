@@ -175,7 +175,7 @@ func (h *AuthHandler) Activate(c *gin.Context)  {
 		return 
 	}
 
-	c.Redirect(http.StatusOK, clientRedirectURL)
+	c.Redirect(http.StatusFound, clientRedirectURL)
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context)  {
