@@ -34,6 +34,7 @@ func New(log *slog.Logger, productHandler *product.PrductHandler, authHandler *a
 			"Accept",
 			"Authorization",
 		},
+		AllowCredentials: true,
 		MaxAge: 12 * time.Hour,
 	}))
 

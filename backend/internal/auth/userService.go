@@ -129,7 +129,6 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 	user, err := s.userRepository.GetByEmail(ctx, email)
 
 	if err != nil {
-
 		if errors.Is(err, ErrUserNotFound) {
 			return AuthResponse{}, ErrInvalidCredentials
 		}
@@ -141,6 +140,10 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 		[]byte(password),
 	); err != nil {
 		return AuthResponse{}, ErrInvalidCredentials
+	}
+
+	if user.IsEmailVerified == false {
+		return AuthResponse{}, ErrUserNotActivated
 	}
 
 	tokens, err := s.tokenService.GenerateTokens(user.ID)
@@ -213,6 +216,5 @@ func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthRes
 func (s *UserService) GetAllUsers(
 	ctx context.Context,
 ) ([]User, error) {
-
 	return s.userRepository.GetAll(ctx)
 }
