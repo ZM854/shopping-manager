@@ -11,7 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func New(log *slog.Logger, productHandler *product.PrductHandler, authHandler *auth.AuthHandler) *gin.Engine {
+func New(
+	log *slog.Logger, 
+	productHandler *product.PrductHandler, 
+	authHandler *auth.AuthHandler,
+	authMiddleware *middleware.AuthMiddleware,
+) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestLogger(log))
@@ -38,12 +43,6 @@ func New(log *slog.Logger, productHandler *product.PrductHandler, authHandler *a
 		MaxAge: 12 * time.Hour,
 	}))
 
-	router.GET("/products", productHandler.GetProducts)
-	router.GET("/products/:id", productHandler.GetProduct)
-	router.POST("/products", productHandler.PostProduct)
-	router.PUT("/products/:id", productHandler.UpdateProduct)
-	router.DELETE("/products/:id", productHandler.DeleteProduct)
-
 	router.POST("/registration", authHandler.Registration)
 	router.POST("/login", authHandler.Login)
 	router.POST("/logout", authHandler.Logout)
@@ -51,6 +50,13 @@ func New(log *slog.Logger, productHandler *product.PrductHandler, authHandler *a
 	router.GET("/refresh", authHandler.Refresh)
 	router.GET("/users", authHandler.GetUsers)
 
+	router.Use(authMiddleware.HandleAuth())
+
+	router.GET("/products", productHandler.GetProducts)
+	router.GET("/products/:id", productHandler.GetProduct)
+	router.POST("/products", productHandler.PostProduct)
+	router.PUT("/products/:id", productHandler.UpdateProduct)
+	router.DELETE("/products/:id", productHandler.DeleteProduct)
 
 	return router
 }

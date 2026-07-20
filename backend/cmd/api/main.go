@@ -8,6 +8,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/logger"
+	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
 )
@@ -77,7 +78,14 @@ func main() {
 	)
 	authHandler := auth.NewAuthHandler(log, userService)
 
-	router := router.New(log, productHandler, authHandler)
+	authMiddleware := middleware.NewAuthMiddleware(tokenService)
+
+	router := router.New(
+		log,
+		productHandler, 
+		authHandler,
+		authMiddleware,
+	)
 
 	addr := cfg.ServerPort
 
