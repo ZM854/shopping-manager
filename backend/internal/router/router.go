@@ -13,7 +13,7 @@ import (
 
 func New(
 	log *slog.Logger, 
-	productHandler *product.PrductHandler, 
+	productHandler *product.ProductHandler, 
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
 ) *gin.Engine {
@@ -54,7 +54,7 @@ func New(
 
 	router.GET("/products", productHandler.GetProducts)
 	router.GET("/products/:id", productHandler.GetProduct)
-	router.POST("/products", productHandler.PostProduct)
+	router.POST("/products", productHandler.CreateProduct)
 	router.PUT("/products/:id", productHandler.UpdateProduct)
 	router.DELETE("/products/:id", productHandler.DeleteProduct)
 

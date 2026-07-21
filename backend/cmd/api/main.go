@@ -35,7 +35,8 @@ func main() {
 	log.Info("initializing dependencies")
 
 	productRepo := product.NewProductRepository(db, log)
-	productHandler := product.NewHandler(productRepo, log)
+	productService := product.NewProductService(productRepo, log)
+	productHandler := product.NewProductHandler(productService, log)
 
 	tokenRepo := auth.NewTokenRepository(db, log)
 	tokenService := auth.NewTokenService(
