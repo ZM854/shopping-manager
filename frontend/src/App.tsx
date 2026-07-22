@@ -1,7 +1,8 @@
-import ProductListPage from "./pages/ProductListPage/ProductListPage";
+import { RouterProvider } from "react-router-dom";
+import { router } from "./router/router";
 
 function App() {
-  return <ProductListPage />;
+  return <RouterProvider router={router} />;
 }
 
 export default App;

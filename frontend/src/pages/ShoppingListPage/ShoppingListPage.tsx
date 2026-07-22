@@ -7,9 +7,9 @@ import AddIcon from "../../components/UI/svg/AddIcon/AddIcon";
 import { useModal } from "../../hooks/useModal";
 import { useProducts } from "../../hooks/useProducts";
 import type { Product, UpdateProductRequest } from "../../models/product";
-import cls from "./ProductListPage.module.css";
+import cls from "./ShoppingListPage.module.css";
 
-const ProductListPage = () => {
+const ShoppingListPage = () => {
   const { products, error, createProduct, updateProduct, deleteProduct } =
     useProducts();
   const modal = useModal();
@@ -69,4 +69,4 @@ const ProductListPage = () => {
   );
 };
 
-export default ProductListPage;
+export default ShoppingListPage;
