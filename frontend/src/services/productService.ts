@@ -18,9 +18,6 @@ export default class ProductService {
     return apiFetch<Product>("/products", {
       method: "POST",
       body: JSON.stringify(product),
-      headers: {
-        "Content-Type": "application/json",
-      },
     });
   }
 
@@ -28,9 +25,6 @@ export default class ProductService {
     return apiFetch<Product>(`/products/${id}`, {
       method: "PUT",
       body: JSON.stringify(product),
-      headers: {
-        "Content-Type": "application/json",
-      },
     });
   }
 
