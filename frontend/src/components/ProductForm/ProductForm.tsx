@@ -3,7 +3,7 @@ import type { Product, UpdateProductRequest } from "../../models/product";
 import cls from "./ProductForm.module.css";
 import type { ProductFormData } from "./ProductForm.types";
 import Checkbox from "../UI/input/Checkbox/Checkbox";
-import TextField from "../UI/input/TextInput/TextField";
+import TextField from "../UI/input/TextField/TextField";
 import Button from "../UI/button/Button/Button";
 
 type ProductFormProps = {

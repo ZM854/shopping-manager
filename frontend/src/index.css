@@ -31,6 +31,8 @@
   --text-on-accent: #fefefe;
   --text-secondary: #959ca4;
 
+  --error: #d64545;
+
   --base-font-size: 18px;
   --overlay-bg: rgba(0, 0, 0, 0.6);
   --fs-h1: 4rem;
@@ -116,7 +118,13 @@ select {
   background: transparent;
   border: none;
   outline: none;
-  cursor: pointer;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea {
+  cursor: text;
 }
 
 input[type="number"]::-webkit-outer-spin-button,

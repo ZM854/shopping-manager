@@ -1,6 +1,7 @@
 .field {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
 }
 
 .label {
@@ -11,7 +12,7 @@
 .input {
   width: 100%;
 
-  padding: 0.7rem 0.9rem;
+  padding: 0.8rem 1rem;
 
   border-radius: 0.8rem;
 
@@ -19,11 +20,26 @@
 
   background: var(--surface-alt);
 
-  transition: border-color 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .input:focus {
   border-color: var(--accent);
+}
+
+.errorInput {
+  border-color: var(--error);
+}
+
+.errorInput:focus {
+  border-color: var(--error);
+}
+
+.error {
+  font-size: 0.85rem;
+  color: var(--error);
 }
 
 .input::placeholder {
