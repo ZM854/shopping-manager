@@ -11,7 +11,7 @@ import (
 const (
 	refreshCookieName = "refreshToken"
 	refreshCookieAge = 30 * 24 * 60 * 60
-	clientRedirectURL = "http://localhost:5173"
+	clientRedirectURL = "http://localhost:5173/login"
 )
 
 type AuthHandler struct {
