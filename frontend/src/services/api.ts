@@ -1,3 +1,4 @@
+import { logger } from "../shared/logger";
 import { authService } from "./authService";
 import {
   clearAccessToken,
@@ -6,8 +7,13 @@ import {
 } from "./tokenStorage";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const TAG = "API";
 
 let refreshPromise: Promise<void> | null = null;
+
+interface ApiFetchOptions extends RequestInit {
+  skipRefresh?: boolean;
+}
 
 async function refreshAccessToken(): Promise<void> {
   if (!refreshPromise) {
@@ -47,23 +53,51 @@ async function performRequest(
 
 export async function apiFetch<T>(
   endpoint: string,
-  options: RequestInit = {},
+  options: ApiFetchOptions = {},
 ): Promise<T> {
-  let response = await performRequest(endpoint, options);
+  const { skipRefresh = false, ...fetchOptions } = options;
+  const method = (fetchOptions.method || "GET").toUpperCase();
 
-  if (response.status === 401) {
+  logger.info(TAG, `--> ${method} ${endpoint}`);
+
+  let response: Response;
+
+  try {
+    response = await performRequest(endpoint, fetchOptions);
+  } catch (error) {
+    logger.error(TAG, `<-- NETWORK ERROR ${method} ${endpoint}`, error);
+    throw error;
+  }
+
+  if (response.status === 401 && !skipRefresh) {
+    logger.info(TAG, "attempt to refresh token");
     try {
       await refreshAccessToken();
-      response = await performRequest(endpoint, options);
-    } catch {
+      response = await performRequest(endpoint, fetchOptions);
+      logger.info(TAG, "token refreshed successfully");
+    } catch (error) {
+      logger.error(
+        TAG,
+        "<-- FAIL ${method} ${endpoint} [${response.status} ${response.statusText}",
+        error,
+      );
       clearAccessToken();
-      throw new Error("Unauthorized");
+      throw error;
     }
   }
 
   if (!response.ok) {
+    logger.error(
+      TAG,
+      `<-- FAIL ${method} ${endpoint} [${response.status} ${response.statusText}]`,
+    );
     throw new Error("Request failed");
   }
+
+  logger.debug(
+    TAG,
+    `<-- SUCCESS ${method} ${endpoint} [${response.status} ${response.statusText}]`,
+  );
 
   if (response.status === 204) {
     return undefined as T;

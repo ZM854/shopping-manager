@@ -24,6 +24,7 @@ export class AuthService {
   async refresh(): Promise<AuthResponse> {
     return apiFetch<AuthResponse>("/refresh", {
       method: "POST",
+      skipRefresh: true,
     });
   }
 
