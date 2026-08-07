@@ -48,7 +48,7 @@ func New(
 	router.POST("/login", authHandler.Login)
 	router.POST("/logout", authHandler.Logout)
 	router.GET("/activate/:link", authHandler.Activate)
-	router.GET("/refresh", authHandler.Refresh)
+	router.POST("/refresh", authHandler.Refresh)
 	router.GET("/users", authHandler.GetUsers)
 
 	router.Use(authMiddleware.HandleAuth())
