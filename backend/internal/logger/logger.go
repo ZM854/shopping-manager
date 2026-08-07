@@ -3,6 +3,9 @@ package logger
 import (
 	"log/slog"
 	"os"
+	"time"
+
+	"github.com/lmittmann/tint"
 )
 
 func levelByEnv(env string) slog.Level {
@@ -23,7 +26,11 @@ func New(env string) *slog.Logger {
 	var handler slog.Handler
 
 	if env == "dev" {
-		handler = slog.NewTextHandler(os.Stdout, opts)
+		handler = tint.NewTextHandler(os.Stdout, &tint.Options{
+			Level: levelByEnv(env),
+			TimeFormat: time.TimeOnly,
+			NoColor: false,
+		})
 	} else {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	}

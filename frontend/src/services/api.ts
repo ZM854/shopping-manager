@@ -78,7 +78,7 @@ export async function apiFetch<T>(
     } catch (error) {
       logger.error(
         TAG,
-        "<-- FAIL ${method} ${endpoint} [${response.status} ${response.statusText}",
+        `<-- FAIL ${method} ${endpoint} [${response.status} ${response.statusText}`,
         error,
       );
       clearAccessToken();
