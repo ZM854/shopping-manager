@@ -1,0 +1,2 @@
+ALTER TABLE users
+ADD COLUMN name varchar(20) NOT NULL;
