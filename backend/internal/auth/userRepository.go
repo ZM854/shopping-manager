@@ -14,8 +14,6 @@ import (
 var ErrUserNotFound = errors.New("User not found")
 var ErrUserAlreadyExist = errors.New("User already exist")
 
-
-
 type UserRepository struct {
 	db *pgxpool.Pool
 	log *slog.Logger
@@ -30,7 +28,7 @@ func NewUserRepository(db *pgxpool.Pool, log *slog.Logger) *UserRepository  {
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (User, error) {
 	const query = `
-		SELECT id, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified, activation_token
 		FROM users
 		WHERE email = $1
 	`
@@ -41,6 +39,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (User, er
 
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
+		&user.Name,
 		&user.Email,
 		&user.PasswordHash,
 		&user.IsEmailVerified,
@@ -72,7 +71,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (User, er
 
 func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 	const query = `
-		SELECT id, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified, activation_token
 		FROM users
 		WHERE id = $1
 	`
@@ -83,6 +82,7 @@ func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
+		&user.Name,
 		&user.Email,
 		&user.PasswordHash,
 		&user.IsEmailVerified,
@@ -113,7 +113,7 @@ func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 
 func (r *UserRepository) GetByActivationToken(ctx context.Context, token string) (User, error) {
 	const query = `
-		SELECT id, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified, activation_token
 		FROM users
 		WHERE activation_token = $1
 	`
@@ -124,6 +124,7 @@ func (r *UserRepository) GetByActivationToken(ctx context.Context, token string)
 
 	err := r.db.QueryRow(ctx, query, token).Scan(
 		&user.ID,
+		&user.Name,
 		&user.Email,
 		&user.PasswordHash,
 		&user.IsEmailVerified,
@@ -153,7 +154,7 @@ func (r *UserRepository) GetByActivationToken(ctx context.Context, token string)
 
 func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
 	const query = `
-		SELECT id, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified, activation_token
 		FROM users
 		ORDER BY id
 	`
@@ -174,6 +175,7 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
 
 		err:= rows.Scan(
 			&user.ID,
+			&user.Name,
 			&user.Email,
 			&user.PasswordHash,
 			&user.IsEmailVerified,
@@ -200,17 +202,19 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
 func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest) (User, error)  {
 	const query = `
 		INSERT INTO users (
+			name,
 			email,
 			password_hash,
 			activation_token
 		)
-		VALUES ($1, $2, $3)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`
 
 	start := time.Now()
 
 	newUser := User{
+		Name: userData.Name,
 		Email: userData.Email,
 		PasswordHash: userData.PasswordHash,
 		IsEmailVerified: false,
@@ -218,7 +222,8 @@ func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest)
 	}
 
 	err := r.db.QueryRow(
-		ctx, query, 
+		ctx, query,
+		userData.Name,
 		userData.Email, 
 		userData.PasswordHash, 
 		userData.ActivationToken,
@@ -251,12 +256,13 @@ func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserReq
 	const query = `
 		UPDATE users
 		SET
-			email = $2,
-			password_hash = $3,
-			is_email_verified = $4,
-			activation_token = $5
+			name = $2,
+			email = $3,
+			password_hash = $4,
+			is_email_verified = $5,
+			activation_token = $6
 		WHERE id = $1
-		RETURNING id, email, password_hash, is_email_verified, activation_token
+		RETURNING id, name, email, password_hash, is_email_verified, activation_token
 	`
 
 	start := time.Now()
@@ -267,12 +273,14 @@ func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserReq
 		ctx, 
 		query, 
 		id, 
+		req.Name,
 		req.Email,
 		req.PasswordHash,
 		req.IsEmailVerified,
 		req.ActivationToken,
 	).Scan(
 		&user.ID,
+		&user.Name,
 		&user.Email,
 		&user.PasswordHash,
 		&user.IsEmailVerified,

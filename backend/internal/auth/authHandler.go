@@ -41,6 +41,7 @@ func (h *AuthHandler) Registration(c *gin.Context)  {
 
 	resp, err := h.userService.Registration(
 		c.Request.Context(),
+		req.Name,
 		req.Email,
 		req.Password,
 	)

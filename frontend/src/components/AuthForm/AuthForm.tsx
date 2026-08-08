@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import type { LoginRequest } from "../../models/auth";
-import type { AuthFormProps } from "./AuthForm.types";
+import type { LoginRequest, RegistrationRequest } from "../../models/auth";
+import type { AuthFormData, AuthFormProps } from "./AuthForm.types";
 import Button from "../UI/button/Button/Button";
 import cls from "./AuthForm.module.css";
 import TextField from "../UI/input/TextField/TextField";
@@ -16,16 +16,45 @@ export default function AuthForm({
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginRequest>();
+  } = useForm<AuthFormData>();
 
   const isLogin = mode === "login";
+
+  const handleFormSubmit = (data: AuthFormData) => {
+    if (isLogin) {
+      onSubmit(data as LoginRequest);
+    } else {
+      onSubmit(data as RegistrationRequest);
+    }
+  };
 
   return (
     <div className={cls.container}>
       <div className={cls.card}>
         <h1 className={cls.title}>{isLogin ? "Вход" : "Регистрация"}</h1>
 
-        <form className={cls.form} onSubmit={handleSubmit(onSubmit)}>
+        <form className={cls.form} onSubmit={handleSubmit(handleFormSubmit)}>
+          {!isLogin && (
+            <TextField
+              label="Имя"
+              type="text"
+              autoComplete="given-name"
+              error={errors.name?.message}
+              {...register("name", {
+                required: "Введите имя",
+
+                minLength: {
+                  value: 2,
+                  message: "Минимум 2 символа",
+                },
+
+                maxLength: {
+                  value: 20,
+                  message: "Максимум 20 символов",
+                },
+              })}
+            />
+          )}
           <TextField
             label="Email"
             type="email"
@@ -39,7 +68,6 @@ export default function AuthForm({
               },
             })}
           />
-
           <TextField
             label="Пароль"
             type="password"
@@ -59,9 +87,7 @@ export default function AuthForm({
               },
             })}
           />
-
           {error && <p className={cls.error}>{error}</p>}
-
           <Button type="submit" disabled={loading || isSubmitting}>
             {isLogin ? "Войти" : "Зарегистрироваться"}
           </Button>

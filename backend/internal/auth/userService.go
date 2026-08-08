@@ -42,6 +42,7 @@ func NewUserService(
 
 func (s *UserService) Registration(
 	ctx context.Context,
+	name string,
 	email string,
 	password string,
 
@@ -50,15 +51,18 @@ func (s *UserService) Registration(
 		[]byte(password),
 		bcrypt.DefaultCost,
 	)
+
 	if err != nil {
 		s.log.Error("failed to hash password", "error", err)
 		return AuthResponse{}, err
 	}
+
 	activationToken := uuid.NewString()
 
 	user, err := s.userRepository.Create(
 		ctx,
 		CreateUserRequest{
+			Name: name,
 			Email: email,
 			PasswordHash: string(passwordHash),
 			ActivationToken: activationToken,
@@ -82,6 +86,7 @@ func (s *UserService) Registration(
 			activationToken,
 		),
 	)
+
 	tokens, err := s.tokenService.GenerateTokens(user.ID)
 
 	if err != nil {
@@ -114,6 +119,7 @@ func (s *UserService) Activate(ctx context.Context, activationLink string) error
 		ctx,
 		user.ID,
 		UpdateUserRequest{
+			Name: user.Name,
 			Email: user.Email,
 			PasswordHash: user.PasswordHash,
 			IsEmailVerified: true,

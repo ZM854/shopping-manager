@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import AuthForm from "../../components/AuthForm/AuthForm";
 import cls from "./RegistrationPage.module.css";
+import type { RegistrationRequest } from "../../models/auth";
 
 export default function RegistrationPage() {
   const { register } = useAuth();
@@ -11,7 +12,7 @@ export default function RegistrationPage() {
 
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (data: { email: string; password: string }) => {
+  const handleSubmit = async (data: RegistrationRequest) => {
     try {
       setError(null);
 
