@@ -1,6 +1,6 @@
-import { Outlet } from "react-router-dom";
-import cls from "./Layout.module.css";
-import BottomNavigaton from "./BottomNavigation/BottomNavigation";
+import { Outlet } from 'react-router-dom';
+import cls from './Layout.module.css';
+import BottomNavigation from './BottomNavigation/BottomNavigation';
 
 const Layout = () => {
   return (
@@ -8,7 +8,8 @@ const Layout = () => {
       <main className={cls.content}>
         <Outlet />
       </main>
-      <BottomNavigaton />
+
+      <BottomNavigation />
     </div>
   );
 };

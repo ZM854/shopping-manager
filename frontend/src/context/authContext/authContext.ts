@@ -1,8 +1,8 @@
 import { createContext } from "react";
 
-import type { LoginRequest, RegistrationRequest } from "../models/auth";
+import type { LoginRequest, RegistrationRequest } from "../../models/auth.ts";
 
-import type { User } from "../models/user";
+import type { User } from "../../models/user.ts";
 
 export interface AuthContextValue {
   user: User | null;
