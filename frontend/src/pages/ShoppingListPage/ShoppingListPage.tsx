@@ -1,13 +1,12 @@
-import { useState } from "react";
-import ProductForm from "../../components/ProductForm/ProductForm";
-import ProductList from "../../components/ProductList/ProductList";
-import IconButton from "../../components/UI/button/ActionButton/IconButton";
-import Modal from "../../components/UI/modal/Modal/Modal";
-import AddIcon from "../../components/UI/svg/AddIcon/AddIcon";
-import { useModal } from "../../hooks/useModal";
-import { useProducts } from "../../hooks/useProducts";
-import type { Product, UpdateProductRequest } from "../../models/product";
-import cls from "./ShoppingListPage.module.css";
+import { useState } from 'react';
+import ProductForm from '../../components/ProductForm/ProductForm';
+import ProductList from '../../components/ProductList/ProductList';
+import Modal from '../../components/UI/modal/Modal/Modal';
+import AddIcon from '../../components/UI/svg/AddIcon/AddIcon';
+import { useModal } from '../../hooks/useModal';
+import { useProducts } from '../../hooks/useProducts';
+import type { Product, UpdateProductRequest } from '../../models/product';
+import { useScaffold } from '../../hooks/useScaffold.ts';
 
 const ShoppingListPage = () => {
   const { products, error, createProduct, updateProduct, deleteProduct } =
@@ -49,6 +48,13 @@ const ShoppingListPage = () => {
     modal.close();
   };
 
+  useScaffold({
+    fab: {
+      onClick: handleCreate,
+      icon: <AddIcon />,
+    },
+  });
+
   return (
     <div>
       <ProductList
@@ -58,9 +64,6 @@ const ShoppingListPage = () => {
         updateProduct={updateProduct}
         deleteProduct={deleteProduct}
       />
-      <IconButton onClick={handleCreate}>
-        <AddIcon className={cls.addIcon} />
-      </IconButton>
 
       <Modal isOpen={modal.isOpen} onClose={handleModalClose}>
         <ProductForm product={editingProduct} onSave={handleFormSave} />

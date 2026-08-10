@@ -1,9 +1,9 @@
-import type { Product, UpdateProductRequest } from "../../models/product";
-import IconButton from "../UI/button/ActionButton/IconButton";
-import Checkbox from "../UI/input/Checkbox/Checkbox";
-import DeleteIcon from "../UI/svg/DeleteIcon/DeleteIcon";
-import EditIcon from "../UI/svg/EditIcon/EditIcon";
-import cls from "./ProductCard.module.css";
+import type { Product, UpdateProductRequest } from '../../models/product';
+import IconButton from '../UI/button/IconButton/IconButton';
+import Checkbox from '../UI/input/Checkbox/Checkbox';
+import DeleteIcon from '../UI/svg/DeleteIcon/DeleteIcon';
+import EditIcon from '../UI/svg/EditIcon/EditIcon';
+import cls from './ProductCard.module.css';
 
 type ProductCardProps = {
   product: Product;
