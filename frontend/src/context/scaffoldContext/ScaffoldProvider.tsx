@@ -3,14 +3,16 @@ import {
   type FabConfig,
   ScaffoldActionContext,
   ScaffoldStateContext,
+  type TopBarConfig,
 } from './scaffoldContext.ts';
 
 const ScaffoldProvider = ({ children }: PropsWithChildren) => {
   const [fab, setFab] = useState<FabConfig | null>(null);
+  const [topBar, setTopBar] = useState<TopBarConfig | null>(null);
 
-  const actionValue = useMemo(() => ({ setFab }), []);
+  const actionValue = useMemo(() => ({ setFab, setTopBar }), []);
 
-  const stateValue = useMemo(() => ({ fab }), [fab]);
+  const stateValue = useMemo(() => ({ fab, topBar }), [fab, topBar]);
 
   return (
     <ScaffoldActionContext.Provider value={actionValue}>

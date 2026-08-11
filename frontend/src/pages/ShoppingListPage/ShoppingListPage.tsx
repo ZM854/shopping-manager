@@ -7,6 +7,7 @@ import { useModal } from '../../hooks/useModal';
 import { useProducts } from '../../hooks/useProducts';
 import type { Product, UpdateProductRequest } from '../../models/product';
 import { useScaffold } from '../../hooks/useScaffold.ts';
+import DeleteIcon from '../../components/UI/svg/DeleteIcon/DeleteIcon.tsx';
 
 const ShoppingListPage = () => {
   const { products, error, createProduct, updateProduct, deleteProduct } =
@@ -52,6 +53,10 @@ const ShoppingListPage = () => {
     fab: {
       onClick: handleCreate,
       icon: <AddIcon />,
+    },
+    topBar: {
+      actionIcon: <DeleteIcon />,
+      title: 'Покупки',
     },
   });
 

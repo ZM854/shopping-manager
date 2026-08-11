@@ -5,14 +5,19 @@ import { useScaffoldState } from '../hooks/useScaffold.ts';
 import IconButton from '../components/UI/button/IconButton/IconButton.tsx';
 import ScaffoldProvider from '../context/scaffoldContext/ScaffoldProvider.tsx';
 import TopAppBar from './TopAppBar/TopAppBar.tsx';
-import AddIcon from '../components/UI/svg/AddIcon/AddIcon.tsx';
 
 const LayoutContent = () => {
-  const { fab } = useScaffoldState();
+  const { fab, topBar } = useScaffoldState();
 
   return (
     <div className={cls.layout}>
-      <TopAppBar title="Покупки" actionIcon={<AddIcon />} />
+      {topBar && (
+        <TopAppBar
+          title={topBar.title}
+          actionIcon={topBar.actionIcon}
+          onActionButtonClick={topBar.onActionClick}
+        />
+      )}
       <main className={cls.content}>
         <Outlet />
       </main>

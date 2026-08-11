@@ -3,6 +3,7 @@ import {
   type FabConfig,
   ScaffoldActionContext,
   ScaffoldStateContext,
+  type TopBarConfig,
 } from '../context/scaffoldContext/scaffoldContext.ts';
 
 export function useScaffoldState() {
@@ -14,7 +15,10 @@ export function useScaffoldState() {
   return ctx;
 }
 
-export function useScaffold(config: { fab?: FabConfig | null }) {
+export function useScaffold(config: {
+  fab?: FabConfig | null;
+  topBar?: TopBarConfig | null;
+}) {
   const actions = useContext(ScaffoldActionContext);
 
   if (!actions)
@@ -23,14 +27,19 @@ export function useScaffold(config: { fab?: FabConfig | null }) {
     );
 
   const fab = config.fab;
-
+  const topBar = config.topBar;
   useLayoutEffect(() => {
     if (fab !== undefined) {
       actions.setFab(fab);
     }
 
+    if (topBar !== undefined) {
+      actions.setTopBar(topBar);
+    }
+
     return () => {
       actions.setFab(null);
+      actions.setTopBar(null);
     };
-  }, [actions, fab, fab?.icon, fab?.onClick]);
+  }, [actions, fab, topBar]);
 }
