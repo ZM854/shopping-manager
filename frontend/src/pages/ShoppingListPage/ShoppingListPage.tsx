@@ -10,8 +10,14 @@ import { useScaffold } from '../../hooks/useScaffold.ts';
 import DeleteIcon from '../../components/UI/svg/DeleteIcon/DeleteIcon.tsx';
 
 const ShoppingListPage = () => {
-  const { products, error, createProduct, updateProduct, deleteProduct } =
-    useProducts();
+  const {
+    products,
+    error,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+    deleteAllProducts,
+  } = useProducts();
   const modal = useModal();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
@@ -57,6 +63,7 @@ const ShoppingListPage = () => {
     topBar: {
       actionIcon: <DeleteIcon />,
       title: 'Покупки',
+      onActionClick: deleteAllProducts,
     },
   });
 

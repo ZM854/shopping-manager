@@ -2,12 +2,12 @@ import type {
   CreateProductRequest,
   Product,
   UpdateProductRequest,
-} from "../models/product";
-import { apiFetch } from "./api";
+} from '../models/product';
+import { apiFetch } from './api';
 
 export default class ProductService {
   static async getProducts() {
-    return apiFetch<Product[]>("/products");
+    return apiFetch<Product[]>('/products');
   }
 
   static async getProductById(id: number) {
@@ -15,22 +15,28 @@ export default class ProductService {
   }
 
   static async postProduct(product: CreateProductRequest) {
-    return apiFetch<Product>("/products", {
-      method: "POST",
+    return apiFetch<Product>('/products', {
+      method: 'POST',
       body: JSON.stringify(product),
     });
   }
 
   static async updateProduct(id: number, product: UpdateProductRequest) {
     return apiFetch<Product>(`/products/${id}`, {
-      method: "PUT",
+      method: 'PUT',
       body: JSON.stringify(product),
     });
   }
 
   static async deleteProduct(id: number) {
     return apiFetch<Product>(`/products/${id}`, {
-      method: "DELETE",
+      method: 'DELETE',
+    });
+  }
+
+  static async deleteAllProducts() {
+    return apiFetch<Product[]>('/products', {
+      method: 'DELETE',
     });
   }
 }

@@ -320,7 +320,7 @@ func (r *ProductRepository) DeleteProduct(
 	return nil
 }
 
-func (r *ProductRepository) DeleteAllProduct(
+func (r *ProductRepository) DeleteAllProducts(
 	ctx context.Context,
 	userID int64,
 ) error {

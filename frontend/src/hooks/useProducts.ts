@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 import type {
   CreateProductRequest,
   Product,
   UpdateProductRequest,
-} from "../models/product";
-import ProductService from "../services/productService";
+} from '../models/product';
+import ProductService from '../services/productService';
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -16,7 +16,7 @@ export function useProducts() {
       setProducts((prev) => [...prev, product]);
       return product;
     } catch (error) {
-      setError("failed to create product");
+      setError('failed to create product');
       throw error;
     }
   };
@@ -28,7 +28,7 @@ export function useProducts() {
     const productToUpdate = products.find((product) => product.id === id);
 
     if (!productToUpdate) {
-      setError("product not found");
+      setError('product not found');
       return;
     }
 
@@ -53,7 +53,17 @@ export function useProducts() {
       await ProductService.deleteProduct(id);
       setProducts((prev) => prev.filter((product) => product.id !== id));
     } catch (error) {
-      setError("failed to delete product");
+      setError('failed to delete product');
+      throw error;
+    }
+  };
+
+  const deleteAllProducts = async () => {
+    try {
+      await ProductService.deleteAllProducts();
+      setProducts([]);
+    } catch (error) {
+      setError('failed to delete all products');
       throw error;
     }
   };
@@ -61,7 +71,7 @@ export function useProducts() {
   useEffect(() => {
     ProductService.getProducts()
       .then(setProducts)
-      .catch(() => setError("failed to load products"))
+      .catch(() => setError('failed to load products'))
       .finally();
   }, []);
 
@@ -71,5 +81,6 @@ export function useProducts() {
     createProduct,
     updateProduct,
     deleteProduct,
+    deleteAllProducts,
   };
 }
