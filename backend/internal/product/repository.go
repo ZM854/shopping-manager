@@ -320,6 +320,45 @@ func (r *ProductRepository) DeleteProduct(
 	return nil
 }
 
+func (r *ProductRepository) DeleteAllProduct(
+	ctx context.Context,
+	userID int64,
+) error {
+	const query = `
+		DELETE FROM products
+		WHERE user_id = $1
+	`
+
+	start := time.Now()
+
+	tag, err := r.db.Exec(
+		ctx,
+		query,
+		userID,
+	)
+
+	if err != nil {
+		r.log.Error(
+			"failed to delete all products",
+			"user_id", userID,
+			"error", err,
+		)
+		return err
+	}
+
+	if tag.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+
+	r.log.Debug(
+		"all products deleted",
+		"user_id", userID,
+		"duration", time.Since(start),
+	)
+
+	return nil
+}
+
 func NewProductRepository(
 	db *pgxpool.Pool,
 	log *slog.Logger,

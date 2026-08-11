@@ -12,8 +12,8 @@ import (
 )
 
 func New(
-	log *slog.Logger, 
-	productHandler *product.ProductHandler, 
+	log *slog.Logger,
+	productHandler *product.ProductHandler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
 ) *gin.Engine {
@@ -41,7 +41,7 @@ func New(
 			"Authorization",
 		},
 		AllowCredentials: true,
-		MaxAge: 12 * time.Hour,
+		MaxAge:           12 * time.Hour,
 	}))
 
 	router.POST("/registration", authHandler.Registration)
@@ -58,6 +58,7 @@ func New(
 	router.POST("/products", productHandler.CreateProduct)
 	router.PUT("/products/:id", productHandler.UpdateProduct)
 	router.DELETE("/products/:id", productHandler.DeleteProduct)
+	router.DELETE("/products", productHandler.DeleteAllProducts)
 
 	return router
 }

@@ -242,6 +242,43 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *ProductHandler) DeleteAllProducts(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "user not authenticated",
+		})
+		return
+	}
+
+	err := h.service.DeleteAllProducts(
+		c.Request.Context(),
+		userID,
+	)
+
+	if errors.Is(err, ErrProductNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "products not found",
+		})
+		return
+	}
+
+	if err != nil {
+		h.log.Error(
+			"failed to delete all products",
+			"user_id", userID,
+			"error", err,
+		)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to delete products",
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 func NewProductHandler(
 	service *ProductService,
 	log *slog.Logger,

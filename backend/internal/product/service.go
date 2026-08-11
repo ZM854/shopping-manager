@@ -32,6 +32,11 @@ type ProductRepositoryInterface interface {
 		userID int64,
 		productID int64,
 	) error
+
+	DeleteAllProducts(
+		ctx context.Context,
+		userID int64,
+	) error
 }
 
 type ProductService struct {
@@ -90,4 +95,11 @@ func (s *ProductService) DeleteProduct(
 	productID int64,
 ) error {
 	return s.repository.DeleteProduct(ctx, userID, productID)
+}
+
+func (s *ProductService) DeleteAllProducts(
+	ctx context.Context,
+	userID int64,
+) error {
+	return s.repository.DeleteAllProducts(ctx, userID)
 }
