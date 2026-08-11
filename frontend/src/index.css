@@ -76,7 +76,6 @@
 
 html {
   scroll-behavior: smooth;
-  scrollbar-gutter: stable;
 }
 
 body {
@@ -154,7 +153,6 @@ h4,
 h5,
 h6 {
   font-size: inherit;
-  font-weight: inherit;
   font-family: var(--arial);
   font-weight: 700;
   line-height: 1.1;
