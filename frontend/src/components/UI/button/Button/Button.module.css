@@ -8,11 +8,7 @@
 
   padding: 0.7rem 1rem;
 
-  border: none;
   border-radius: 0.75rem;
-
-  background: var(--accent);
-  color: var(--text-on-accent);
 
   font: inherit;
   font-weight: 500;
@@ -21,11 +17,50 @@
 
   transition:
     background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s,
     opacity 0.2s;
 }
 
-.button:hover {
+.filled {
+  border: 1px solid transparent;
+
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.filled:hover {
   background: color-mix(in srgb, var(--accent) 90%, white);
+}
+
+.outlined {
+  border: 2px solid var(--accent);
+
+  background: transparent;
+  color: var(--accent);
+}
+
+.outlined:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.danger.filled {
+  background: var(--danger);
+  color: var(--text-on-accent);
+}
+
+.danger.filled:hover {
+  background: color-mix(in srgb, var(--danger) 90%, white);
+}
+
+.danger.outlined {
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.danger.outlined:hover {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .button:focus-visible {

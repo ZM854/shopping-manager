@@ -1,22 +1,22 @@
 @font-face {
-  font-family: "Roboto";
-  src: url("./assets/fonts/roboto-400.woff2") format("woff2");
+  font-family: 'Roboto';
+  src: url('./assets/fonts/roboto-400.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Roboto";
-  src: url("./assets/fonts/roboto-500.woff2") format("woff2");
+  font-family: 'Roboto';
+  src: url('./assets/fonts/roboto-500.woff2') format('woff2');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Roboto";
-  src: url("./assets/fonts/roboto-700.woff2") format("woff2");
+  font-family: 'Roboto';
+  src: url('./assets/fonts/roboto-700.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -32,6 +32,7 @@
   --text-secondary: #959ca4;
 
   --error: #d64545;
+  --danger: #f44336;
 
   --base-font-size: 18px;
   --overlay-bg: rgba(0, 0, 0, 0.6);
@@ -42,7 +43,7 @@
   --fs-nav: 1.125rem;
 
   --arial: Arial, Helvetica, sans-serif;
-  --roboto: "Roboto", Helvetica, sans-serif;
+  --roboto: 'Roboto', Helvetica, sans-serif;
   color-scheme: light dark;
 }
 
@@ -119,19 +120,19 @@ select {
   outline: none;
 }
 
-input[type="text"],
-input[type="email"],
-input[type="password"],
+input[type='text'],
+input[type='email'],
+input[type='password'],
 textarea {
   cursor: text;
 }
 
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
 
-input[type="number"] {
+input[type='number'] {
   appearance: textfield;
   -moz-appearance: textfield;
 }

@@ -8,6 +8,7 @@ import { useProducts } from '../../hooks/useProducts';
 import type { Product, UpdateProductRequest } from '../../models/product';
 import { useScaffold } from '../../hooks/useScaffold.ts';
 import DeleteIcon from '../../components/UI/svg/DeleteIcon/DeleteIcon.tsx';
+import AlertDialog from '../../components/AlertDialog/AlertDialog.tsx';
 
 const ShoppingListPage = () => {
   const {
@@ -18,22 +19,25 @@ const ShoppingListPage = () => {
     deleteProduct,
     deleteAllProducts,
   } = useProducts();
-  const modal = useModal();
+
+  const productFormModal = useModal();
+  const dialogModal = useModal();
+
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
-    modal.open();
+    productFormModal.open();
   };
 
   const handleCreate = () => {
     setEditingProduct(null);
-    modal.open();
+    productFormModal.open();
   };
 
-  const handleModalClose = () => {
+  const handleProductModalClose = () => {
     setEditingProduct(null);
-    modal.close();
+    productFormModal.close();
   };
 
   const handleFormSave = async (productData: UpdateProductRequest) => {
@@ -52,7 +56,20 @@ const ShoppingListPage = () => {
       });
     }
     setEditingProduct(null);
-    modal.close();
+    productFormModal.close();
+  };
+
+  const handleDialogModalOpen = () => {
+    dialogModal.open();
+  };
+
+  const handleDialogModalClose = () => {
+    dialogModal.close();
+  };
+
+  const handleDeleteAllProducts = () => {
+    deleteAllProducts();
+    dialogModal.close();
   };
 
   useScaffold({
@@ -63,7 +80,7 @@ const ShoppingListPage = () => {
     topBar: {
       actionIcon: <DeleteIcon />,
       title: 'Покупки',
-      onActionClick: deleteAllProducts,
+      onActionClick: handleDialogModalOpen,
     },
   });
 
@@ -77,8 +94,19 @@ const ShoppingListPage = () => {
         deleteProduct={deleteProduct}
       />
 
-      <Modal isOpen={modal.isOpen} onClose={handleModalClose}>
+      <Modal isOpen={productFormModal.isOpen} onClose={handleProductModalClose}>
         <ProductForm product={editingProduct} onSave={handleFormSave} />
+      </Modal>
+
+      <Modal isOpen={dialogModal.isOpen} onClose={handleDialogModalClose}>
+        <AlertDialog
+          title="Очистить весь список?"
+          message="Это действие невозможно отменить."
+          onDiscard={handleDialogModalClose}
+          onConfirm={handleDeleteAllProducts}
+          confirmText="Удалить"
+          isDanger={true}
+        />
       </Modal>
     </div>
   );
