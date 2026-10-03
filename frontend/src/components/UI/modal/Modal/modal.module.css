@@ -5,5 +5,29 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: var(--space-4);
   z-index: 1000;
+}
+
+.modal {
+  width: min(100%, 26.25rem);
+  max-height: calc(100dvh - var(--space-8));
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dialog);
+  outline: none;
+}
+
+@media (max-width: 30rem) {
+  .backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: min(85dvh, 42rem);
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+  }
 }

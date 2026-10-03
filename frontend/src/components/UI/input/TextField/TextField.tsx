@@ -22,13 +22,14 @@ const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
           ref={ref}
           id={inputId}
           aria-invalid={!!error}
+          aria-describedby={error ? `${inputId}-error` : undefined}
           className={[cls.input, error ? cls.errorInput : "", className ?? ""]
             .filter(Boolean)
             .join(" ")}
           {...props}
         />
         {error && (
-          <span role="alert" className={cls.error}>
+          <span id={`${inputId}-error`} role="alert" className={cls.error}>
             {error}
           </span>
         )}

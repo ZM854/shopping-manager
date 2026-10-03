@@ -37,7 +37,9 @@ const ProfilePage = () => {
         <h1 className={cls.name}>{user.name}</h1>
       </div>
       <div className={cls.actions}>
-        <Button onClick={logout}>Выйти из аккаунта</Button>
+        <Button variant="outlined" tone="danger" onClick={logout}>
+          Выйти из аккаунта
+        </Button>
       </div>
     </div>
   );

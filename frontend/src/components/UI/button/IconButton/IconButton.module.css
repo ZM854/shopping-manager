@@ -1,10 +1,38 @@
 .button {
-  background: var(--accent);
-  width: 48px;
-  height: 48px;
-  display: flex;
-  justify-content: center;
+  display: inline-flex;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
   align-items: center;
-  border-radius: 50%;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.filled {
+  width: var(--fab-size);
+  height: var(--fab-size);
   color: var(--text-on-accent);
+  background: var(--accent);
+  box-shadow: 0 0.25rem 0.75rem rgb(31 41 33 / 20%);
+}
+
+.filled:hover { background: var(--accent-hover); }
+.ghost { background: transparent; }
+.ghost:hover { background: var(--surface-selected); }
+
+.danger { color: var(--danger); }
+.danger.ghost:hover { background: var(--danger-surface); }
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.button:not(:disabled):active { transform: scale(0.96); }
+
+.button svg {
+  width: 1.375rem;
+  height: 1.375rem;
 }

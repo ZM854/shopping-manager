@@ -16,13 +16,20 @@ const LayoutContent = () => {
           title={topBar.title}
           actionIcon={topBar.actionIcon}
           onActionButtonClick={topBar.onActionClick}
+          actionLabel={topBar.actionLabel}
         />
       )}
       <main className={cls.content}>
         <Outlet />
       </main>
       {fab && (
-        <IconButton className={cls.fab} type="button" onClick={fab.onClick}>
+        <IconButton
+          className={cls.fab}
+          variant="filled"
+          type="button"
+          onClick={fab.onClick}
+          aria-label={fab.label ?? 'Добавить'}
+        >
           {fab.icon}
         </IconButton>
       )}

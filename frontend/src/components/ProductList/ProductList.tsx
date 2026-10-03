@@ -20,7 +20,11 @@ const ProductList = ({
   return (
     <div className={cls.product_list}>
       {error ? (
-        <span>{error}</span>
+        <p role="alert" className={`${cls.feedback} ${cls.error}`}>
+          Не удалось загрузить список покупок. Попробуйте ещё раз позже.
+        </p>
+      ) : products.length === 0 ? (
+        <p className={cls.feedback}>Список покупок пока пуст.</p>
       ) : (
         products.map((product) => (
           <ProductCard

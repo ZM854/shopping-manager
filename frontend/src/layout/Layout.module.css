@@ -9,16 +9,25 @@
 
 .content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  width: min(100%, 42rem);
+  width: min(100%, var(--content-max-width));
   margin: 0 auto;
 
-  padding: 1rem 1rem 5.5rem;
+  padding: var(--space-4) var(--space-4)
+    calc(var(--bottom-nav-height) + var(--space-4) + env(safe-area-inset-bottom));
 }
 
 .fab {
   position: fixed;
-  right: 16px;
-  bottom: 80px;
+  right: max(var(--space-4), calc((100vw - var(--content-max-width)) / 2 + var(--space-4)));
+  bottom: calc(var(--bottom-nav-height) + var(--space-3) + env(safe-area-inset-bottom));
   z-index: 10;
+}
+
+@media (min-width: 48rem) {
+  .content {
+    padding-right: var(--space-6);
+    padding-left: var(--space-6);
+  }
 }

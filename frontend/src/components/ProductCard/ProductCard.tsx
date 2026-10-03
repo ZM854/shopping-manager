@@ -42,10 +42,17 @@ const ProductCard = ({
         </div>
       </div>
       <div className={cls.card_controls}>
-        <IconButton onClick={() => deleteProduct(product.id)}>
+        <IconButton
+          tone="danger"
+          aria-label={`Удалить ${product.name}`}
+          onClick={() => deleteProduct(product.id)}
+        >
           <DeleteIcon className={cls.icon} />
         </IconButton>
-        <IconButton onClick={() => editProduct(product)}>
+        <IconButton
+          aria-label={`Редактировать ${product.name}`}
+          onClick={() => editProduct(product)}
+        >
           <EditIcon className={cls.icon} />
         </IconButton>
       </div>

@@ -87,7 +87,7 @@ export default function AuthForm({
               },
             })}
           />
-          {error && <p className={cls.error}>{error}</p>}
+          {error && <p role="alert" className={cls.serverError}>{error}</p>}
           <Button type="submit" disabled={loading || isSubmitting}>
             {isLogin ? "Войти" : "Зарегистрироваться"}
           </Button>

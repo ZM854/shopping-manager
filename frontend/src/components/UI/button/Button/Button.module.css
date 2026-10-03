@@ -3,12 +3,12 @@
   justify-content: center;
   align-items: center;
 
-  min-height: 44px;
+  min-height: var(--control-height);
   width: 100%;
 
-  padding: 0.7rem 1rem;
+  padding: 0 var(--space-4);
 
-  border-radius: 0.75rem;
+  border-radius: var(--radius-md);
 
   font: inherit;
   font-weight: 500;
@@ -16,10 +16,11 @@
   cursor: pointer;
 
   transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s,
-    opacity 0.2s;
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .filled {
@@ -30,11 +31,11 @@
 }
 
 .filled:hover {
-  background: color-mix(in srgb, var(--accent) 90%, white);
+  background: var(--accent-hover);
 }
 
 .outlined {
-  border: 2px solid var(--accent);
+  border: 1px solid var(--accent);
 
   background: transparent;
   color: var(--accent);
@@ -50,7 +51,7 @@
 }
 
 .danger.filled:hover {
-  background: color-mix(in srgb, var(--danger) 90%, white);
+  background: color-mix(in srgb, var(--danger) 88%, black);
 }
 
 .danger.outlined {
@@ -64,11 +65,15 @@
 }
 
 .button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 .button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.button:not(:disabled):active {
+  transform: translateY(1px);
 }

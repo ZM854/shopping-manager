@@ -23,49 +23,55 @@
 }
 
 :root {
-  --bg: #fefefe;
-  --accent: #629838;
-  --surface: #d7e3c0;
-  --surface-alt: #e7eaeb;
-  --text: #21282b;
-  --text-on-accent: #fefefe;
-  --text-secondary: #959ca4;
+  --bg: #ffffff;
+  --surface: #f7f8f6;
+  --surface-selected: #eaf2df;
+  --surface-alt: #eef1ed;
+  --accent: #5c8e35;
+  --accent-hover: #4f7c2e;
+  --text: #1f2921;
+  --text-on-accent: #ffffff;
+  --text-secondary: #657066;
+  --border: #dde3da;
+  --focus: #265dce;
+  --error: #c83c36;
+  --danger: #c83c36;
+  --danger-surface: #fcecea;
 
-  --error: #d64545;
-  --danger: #f44336;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
 
-  --base-font-size: 18px;
-  --overlay-bg: rgba(0, 0, 0, 0.6);
-  --fs-h1: 4rem;
-  --fs-h2: 2.6rem;
-  --fs-h3: 1.5rem;
-  --fs-body: 1.125rem;
-  --fs-nav: 1.125rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-full: 999px;
 
-  --arial: Arial, Helvetica, sans-serif;
+  --control-height: 3rem;
+  --icon-button-size: 2.75rem;
+  --fab-size: 3.5rem;
+  --top-bar-height: 4rem;
+  --bottom-nav-height: 4rem;
+  --content-max-width: 42rem;
+
+  --shadow-dialog: 0 0.5rem 1.5rem rgb(31 41 33 / 12%);
+  --overlay-bg: rgb(18 24 19 / 48%);
+  --transition-fast: 150ms ease;
+
+  --fs-h1: clamp(1.75rem, 4vw, 2rem);
+  --fs-h2: 1.375rem;
+  --fs-h3: 1.0625rem;
+  --fs-body: 1rem;
+  --fs-small: 0.875rem;
+  --fs-caption: 0.75rem;
   --roboto: 'Roboto', Helvetica, sans-serif;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  /* TO DO: implement dark theme */
-}
-
-@media (max-width: 64rem) {
-  :root {
-    --fs-h1: 3.5rem;
-    --fs-h2: 2.2rem;
-    --fs-body: 1rem;
-  }
-}
-
-@media (max-width: 48rem) {
-  :root {
-    --fs-h1: 2.5rem;
-    --fs-h2: 1.8rem;
-    --fs-h3: 1.3rem;
-    --fs-body: 0.95rem;
-  }
+  color-scheme: light;
 }
 
 * {
@@ -88,6 +94,7 @@ body {
   background: var(--bg);
 
   min-height: 100vh;
+  min-width: 20rem;
 }
 
 ul,
@@ -108,6 +115,12 @@ button {
   border: none;
   cursor: pointer;
   padding: 0;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 input,
@@ -154,7 +167,7 @@ h4,
 h5,
 h6 {
   font-size: inherit;
-  font-family: var(--arial);
+  font-family: var(--roboto);
   font-weight: 700;
   line-height: 1.1;
 }

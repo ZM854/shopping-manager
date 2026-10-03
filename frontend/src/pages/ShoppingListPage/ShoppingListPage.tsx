@@ -76,9 +76,11 @@ const ShoppingListPage = () => {
     fab: {
       onClick: handleCreate,
       icon: <AddIcon />,
+      label: 'Добавить товар',
     },
     topBar: {
       actionIcon: <DeleteIcon />,
+      actionLabel: 'Очистить список покупок',
       title: 'Покупки',
       onActionClick: handleDialogModalOpen,
     },
@@ -94,11 +96,19 @@ const ShoppingListPage = () => {
         deleteProduct={deleteProduct}
       />
 
-      <Modal isOpen={productFormModal.isOpen} onClose={handleProductModalClose}>
+      <Modal
+        isOpen={productFormModal.isOpen}
+        onClose={handleProductModalClose}
+        ariaLabel={editingProduct ? 'Редактировать товар' : 'Добавить товар'}
+      >
         <ProductForm product={editingProduct} onSave={handleFormSave} />
       </Modal>
 
-      <Modal isOpen={dialogModal.isOpen} onClose={handleDialogModalClose}>
+      <Modal
+        isOpen={dialogModal.isOpen}
+        onClose={handleDialogModalClose}
+        ariaLabel="Подтверждение очистки списка"
+      >
         <AlertDialog
           title="Очистить весь список?"
           message="Это действие невозможно отменить."

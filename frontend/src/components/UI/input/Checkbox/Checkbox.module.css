@@ -1,7 +1,7 @@
 .container {
   display: inline-flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: var(--space-2);
 
   cursor: pointer;
 
@@ -14,16 +14,16 @@
 }
 
 .box {
-  width: 24px;
-  height: 24px;
+  width: 1.5rem;
+  height: 1.5rem;
 
-  border-radius: 0.3rem;
+  border-radius: var(--radius-sm);
 
-  border: 2px solid var(--text-secondary);
+  border: 1px solid var(--text-secondary);
 
   background: var(--bg);
 
-  transition: 0.2s;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .icon {
@@ -42,6 +42,15 @@
 }
 
 .input:focus-visible + .box {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.input:disabled + .box {
+  opacity: 0.5;
+}
+
+.container:has(.input:disabled) {
+  cursor: not-allowed;
+  color: var(--text-secondary);
 }

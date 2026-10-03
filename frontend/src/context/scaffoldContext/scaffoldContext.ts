@@ -3,11 +3,13 @@ import { createContext, type ReactNode } from 'react';
 export interface FabConfig {
   onClick: () => void;
   icon: ReactNode;
+  label?: string;
 }
 
 export interface TopBarConfig {
   onActionClick?: () => void;
   actionIcon?: ReactNode;
+  actionLabel?: string;
   title?: string;
 }
 
