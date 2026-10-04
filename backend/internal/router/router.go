@@ -2,6 +2,7 @@ package router
 
 import (
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
@@ -16,6 +17,7 @@ func New(
 	productHandler *product.ProductHandler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
+	frontendURL string,
 ) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -23,6 +25,7 @@ func New(
 
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
+			frontendURL,
 			"http://localhost:5173",
 			"http://localhost:4173",
 		},
@@ -44,21 +47,25 @@ func New(
 		MaxAge:           12 * time.Hour,
 	}))
 
-	router.POST("/registration", authHandler.Registration)
-	router.POST("/login", authHandler.Login)
-	router.POST("/logout", authHandler.Logout)
-	router.GET("/activate/:link", authHandler.Activate)
-	router.POST("/refresh", authHandler.Refresh)
-	router.GET("/users", authHandler.GetUsers)
+	api := router.Group("/api")
+	api.GET("/healthz", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	api.POST("/registration", authHandler.Registration)
+	api.POST("/login", authHandler.Login)
+	api.POST("/logout", authHandler.Logout)
+	api.GET("/activate/:link", authHandler.Activate)
+	api.POST("/refresh", authHandler.Refresh)
+	api.GET("/users", authHandler.GetUsers)
 
-	router.Use(authMiddleware.HandleAuth())
+	api.Use(authMiddleware.HandleAuth())
 
-	router.GET("/products", productHandler.GetProducts)
-	router.GET("/products/:id", productHandler.GetProduct)
-	router.POST("/products", productHandler.CreateProduct)
-	router.PUT("/products/:id", productHandler.UpdateProduct)
-	router.DELETE("/products/:id", productHandler.DeleteProduct)
-	router.DELETE("/products", productHandler.DeleteAllProducts)
+	api.GET("/products", productHandler.GetProducts)
+	api.GET("/products/:id", productHandler.GetProduct)
+	api.POST("/products", productHandler.CreateProduct)
+	api.PUT("/products/:id", productHandler.UpdateProduct)
+	api.DELETE("/products/:id", productHandler.DeleteProduct)
+	api.DELETE("/products", productHandler.DeleteAllProducts)
 
 	return router
 }

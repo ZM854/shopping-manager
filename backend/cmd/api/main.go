@@ -31,7 +31,7 @@ func main() {
 		log.Info("closing postgres connection pool")
 		db.Close()
 	}()
-	
+
 	log.Info("initializing dependencies")
 
 	productRepo := product.NewProductRepository(db, log)
@@ -40,14 +40,14 @@ func main() {
 
 	tokenRepo := auth.NewTokenRepository(db, log)
 	tokenService := auth.NewTokenService(
-		log, 
-		tokenRepo, 
-		cfg.JWTAccessSecret, 
+		log,
+		tokenRepo,
+		cfg.JWTAccessSecret,
 		cfg.JWTRefreshSecret,
 		cfg.JWTAccessTTL,
 		cfg.JWTRefreshTTL,
 	)
-	
+
 	smtpPort, err := strconv.Atoi(cfg.SMTPPort)
 
 	if err != nil {
@@ -62,6 +62,8 @@ func main() {
 		cfg.SMTPUser,
 		cfg.SMTPPassword,
 		cfg.SMTPFrom,
+		cfg.SMTPAuthEnabled,
+		cfg.SMTPTLSRequired,
 	)
 
 	if err != nil {
@@ -71,21 +73,22 @@ func main() {
 
 	userRepo := auth.NewUserRepository(db, log)
 	userService := auth.NewUserService(
-		log, 
-		userRepo, 
+		log,
+		userRepo,
 		tokenService,
 		mailService,
-		"http://localhost" + cfg.ServerPort + "/activate",
+		cfg.PublicAPIURL+"/activate",
 	)
-	authHandler := auth.NewAuthHandler(log, userService)
+	authHandler := auth.NewAuthHandler(log, userService, cfg.FrontendURL+"/login")
 
 	authMiddleware := middleware.NewAuthMiddleware(tokenService)
 
 	router := router.New(
 		log,
-		productHandler, 
+		productHandler,
 		authHandler,
 		authMiddleware,
+		cfg.FrontendURL,
 	)
 
 	addr := cfg.ServerPort

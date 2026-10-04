@@ -1,0 +1,172 @@
+openapi: 3.0.3
+info:
+  title: Shopping Manager API
+  version: 0.1.0
+  description: Текущие HTTP-маршруты. Все URL используют базовый префикс /api.
+servers:
+  - url: /api
+paths:
+  /healthz:
+    get:
+      summary: Проверка работы HTTP-сервера
+      responses:
+        '200':
+          description: Сервер работает; тело отсутствует
+  /registration:
+    post:
+      summary: Регистрация
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: {type: string}
+                email: {type: string, format: email}
+                password: {type: string, minLength: 6, maxLength: 72}
+      responses:
+        '201': {description: Пользователь зарегистрирован}
+        '400': {description: Некорректное тело запроса}
+        '409': {description: Пользователь уже существует}
+        '500': {description: Ошибка сервера}
+  /login:
+    post:
+      summary: Вход
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string}
+      responses:
+        '200': {description: Успешный вход}
+        '400': {description: Некорректное тело запроса}
+        '401': {description: Неверные учётные данные}
+        '403': {description: Почта не активирована}
+        '500': {description: Ошибка сервера}
+  /logout:
+    post:
+      summary: Выход
+      security: [{refreshCookie: []}]
+      responses:
+        '200': {description: Выход выполнен}
+        '401': {description: Cookie отсутствует}
+        '500': {description: Ошибка сервера}
+  /refresh:
+    post:
+      summary: Обновление токенов
+      security: [{refreshCookie: []}]
+      responses:
+        '200': {description: Токены обновлены}
+        '401': {description: Cookie отсутствует или токен недействителен}
+  /activate/{link}:
+    get:
+      summary: Активация почты по ссылке из письма
+      parameters:
+        - name: link
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '302':
+          description: Перенаправление на страницу входа frontend
+          headers:
+            Location:
+              schema: {type: string}
+        '400': {description: Недействительная ссылка}
+        '500': {description: Ошибка сервера}
+  /users:
+    get:
+      summary: Существующий служебный список пользователей
+      deprecated: true
+      description: Публичный служебный маршрут требует отдельного исправления доступа и DTO.
+      responses:
+        '200': {description: Список пользователей}
+        '500': {description: Ошибка сервера}
+  /products:
+    get:
+      summary: Позиции текущего пользователя
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Массив позиций}
+        '401': {description: Требуется авторизация}
+        '500': {description: Ошибка сервера}
+    post:
+      summary: Создание позиции
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Product'}
+      responses:
+        '201': {description: Позиция создана}
+        '400': {description: Некорректное тело запроса}
+        '401': {description: Требуется авторизация}
+        '500': {description: Ошибка сервера}
+    delete:
+      summary: Очистка позиций текущего пользователя
+      security: [{bearerAuth: []}]
+      responses:
+        '204': {description: Позиции удалены}
+        '401': {description: Требуется авторизация}
+        '404': {description: Позиции не найдены}
+        '500': {description: Ошибка сервера}
+  /products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: integer, format: int64}
+    get:
+      summary: Получение своей позиции
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Позиция}
+        '400': {description: Некорректный идентификатор}
+        '401': {description: Требуется авторизация}
+        '404': {description: Позиция не найдена}
+        '500': {description: Ошибка сервера}
+    put:
+      summary: Изменение своей позиции
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Product'}
+      responses:
+        '200': {description: Позиция обновлена}
+        '400': {description: Некорректный запрос}
+        '401': {description: Требуется авторизация}
+        '404': {description: Позиция не найдена}
+        '500': {description: Ошибка сервера}
+    delete:
+      summary: Удаление своей позиции
+      security: [{bearerAuth: []}]
+      responses:
+        '204': {description: Позиция удалена}
+        '400': {description: Некорректный идентификатор}
+        '401': {description: Требуется авторизация}
+        '404': {description: Позиция не найдена}
+        '500': {description: Ошибка сервера}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refreshToken
+  requestBodies:
+    Product:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name: {type: string}
+              quantity: {type: number, format: float}
+              unit: {type: string}
+              isMarked: {type: boolean}

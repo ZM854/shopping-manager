@@ -9,9 +9,9 @@ import (
 )
 
 type MailService struct {
-	log *slog.Logger
+	log    *slog.Logger
 	client *mail.Client
-	from string
+	from   string
 }
 
 func NewMailService(
@@ -21,24 +21,30 @@ func NewMailService(
 	user string,
 	password string,
 	from string,
+	authEnabled bool,
+	tlsRequired bool,
 ) (*MailService, error) {
-	client, err := mail.NewClient(
-		host,
+	policy := mail.TLSMandatory
+	if !tlsRequired {
+		policy = mail.NoTLS
+	}
+	opts := []mail.Option{
 		mail.WithPort(port),
-		mail.WithSMTPAuth(mail.SMTPAuthPlain),
-		mail.WithUsername(user),
-		mail.WithPassword(password),
-		mail.WithTLSPolicy(mail.TLSMandatory),
-	)
+		mail.WithTLSPolicy(policy),
+	}
+	if authEnabled {
+		opts = append(opts, mail.WithSMTPAuth(mail.SMTPAuthPlain), mail.WithUsername(user), mail.WithPassword(password))
+	}
+	client, err := mail.NewClient(host, opts...)
 
 	if err != nil {
 		return nil, err
 	}
 
 	return &MailService{
-		log: log,
+		log:    log,
 		client: client,
-		from: from,
+		from:   from,
 	}, nil
 }
 

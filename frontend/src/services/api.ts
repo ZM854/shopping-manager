@@ -6,7 +6,7 @@ import {
   setAccessToken,
 } from "./tokenStorage";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 const TAG = "API";
 
 let refreshPromise: Promise<void> | null = null;

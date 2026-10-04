@@ -1,0 +1,4 @@
+# Files executed by Linux tools must keep LF when checked out on Windows.
+Makefile text eol=lf
+**/Dockerfile text eol=lf
+*.sh text eol=lf

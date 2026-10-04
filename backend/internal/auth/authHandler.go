@@ -10,26 +10,28 @@ import (
 
 const (
 	refreshCookieName = "refreshToken"
-	refreshCookieAge = 30 * 24 * 60 * 60
-	clientRedirectURL = "http://localhost:5173/login"
+	refreshCookieAge  = 30 * 24 * 60 * 60
 )
 
 type AuthHandler struct {
-	userService *UserService
-	log *slog.Logger
+	userService       *UserService
+	log               *slog.Logger
+	clientRedirectURL string
 }
 
 func NewAuthHandler(
-	log *slog.Logger, 
+	log *slog.Logger,
 	userService *UserService,
+	clientRedirectURL string,
 ) *AuthHandler {
 	return &AuthHandler{
-		log: log.With("component", "handler", "entity", "auth"),
-		userService: userService,
+		log:               log.With("component", "handler", "entity", "auth"),
+		userService:       userService,
+		clientRedirectURL: clientRedirectURL,
 	}
 }
 
-func (h *AuthHandler) Registration(c *gin.Context)  {
+func (h *AuthHandler) Registration(c *gin.Context) {
 	var req RegistrationRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -71,7 +73,7 @@ func (h *AuthHandler) Registration(c *gin.Context)  {
 	c.JSON(http.StatusCreated, resp)
 }
 
-func (h *AuthHandler) Login(c *gin.Context)  {
+func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -103,7 +105,7 @@ func (h *AuthHandler) Login(c *gin.Context)  {
 
 	if err != nil {
 		h.log.Error(
-			"failed to login", 
+			"failed to login",
 			"email", req.Email,
 			"error", err,
 		)
@@ -119,7 +121,7 @@ func (h *AuthHandler) Login(c *gin.Context)  {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (h *AuthHandler) Logout(c *gin.Context)  {
+func (h *AuthHandler) Logout(c *gin.Context) {
 	refreshToken, err := c.Cookie(refreshCookieName)
 
 	if err != nil {
@@ -133,26 +135,25 @@ func (h *AuthHandler) Logout(c *gin.Context)  {
 
 	if err != nil {
 		h.log.Error(
-			"failed to logout", 
+			"failed to logout",
 			"error", err,
 		)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to logout",
-		})	
+		})
 		return
 	}
 
 	h.clearRefreshCookie(c)
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "logged out",
 	})
 }
 
-func (h *AuthHandler) Activate(c *gin.Context)  {
+func (h *AuthHandler) Activate(c *gin.Context) {
 	activationLink := c.Param("link")
-
 
 	err := h.userService.Activate(c.Request.Context(), activationLink)
 
@@ -165,7 +166,7 @@ func (h *AuthHandler) Activate(c *gin.Context)  {
 
 	if err != nil {
 		h.log.Error(
-			"failed to activate user", 
+			"failed to activate user",
 			"activation_link", activationLink,
 			"error", err,
 		)
@@ -173,13 +174,13 @@ func (h *AuthHandler) Activate(c *gin.Context)  {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to activate email",
 		})
-		return 
+		return
 	}
 
-	c.Redirect(http.StatusFound, clientRedirectURL)
+	c.Redirect(http.StatusFound, h.clientRedirectURL)
 }
 
-func (h *AuthHandler) Refresh(c *gin.Context)  {
+func (h *AuthHandler) Refresh(c *gin.Context) {
 	refreshToken, err := c.Cookie(refreshCookieName)
 
 	if err != nil {
@@ -208,12 +209,12 @@ func (h *AuthHandler) Refresh(c *gin.Context)  {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (h *AuthHandler) GetUsers(c *gin.Context)  {
+func (h *AuthHandler) GetUsers(c *gin.Context) {
 	users, err := h.userService.GetAllUsers(c.Request.Context())
 
 	if err != nil {
 		h.log.Error(
-			"failed to get users", 
+			"failed to get users",
 			"error", err,
 		)
 

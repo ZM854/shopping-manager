@@ -1,0 +1,100 @@
+name: shopping-manager
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-products_db}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ./backend
+      target: migrations
+    environment:
+      PGUSER: ${DB_USER:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-postgres}
+      PGDATABASE: ${DB_NAME:-products_db}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - 'exec migrate -path /migrations -database "postgres://postgres:5432/$$PGDATABASE?sslmode=disable" up'
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    environment:
+      APP_ENV: dev
+      SERVER_PORT: ":8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-products_db}
+      DB_SSLMODE: disable
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Run scripts/dev.ps1 init or make init first}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Run scripts/dev.ps1 init or make init first}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-720h}
+      PUBLIC_API_URL: http://localhost:${APP_PORT:-5173}/api
+      FRONTEND_URL: http://localhost:${APP_PORT:-5173}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_AUTH_ENABLED: "false"
+      SMTP_TLS_REQUIRED: "false"
+      SMTP_FROM: shopping-manager@example.test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    init: true
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    ports:
+      - "127.0.0.1:${APP_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    init: true
+
+volumes:
+  postgres_data:
