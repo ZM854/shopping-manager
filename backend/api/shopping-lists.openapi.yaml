@@ -1,0 +1,354 @@
+openapi: 3.0.3
+info:
+  title: Shopping Manager — контракт списков покупок
+  version: 0.2.0-planned
+  description: >-
+    Целевой контракт этапа 1. Маршруты ещё не подключены к серверу и клиенту.
+    Действующее API описано в openapi.yaml. При реализации старые /products
+    будут заменены одновременно с переводом клиента. Auth и префикс /api сохраняются.
+x-implementation-status: planned
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+paths:
+  /shopping-lists:
+    get:
+      operationId: getShoppingLists
+      summary: Все списки текущего пользователя
+      description: Порядок по id по возрастанию. Пустая коллекция — [].
+      responses:
+        '200':
+          description: Массив списков
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ShoppingList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createShoppingList
+      summary: Создать личный список
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateShoppingList'}
+      responses:
+        '201': {$ref: '#/components/responses/ListResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/BodyTooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /shopping-lists/{listId}:
+    parameters:
+      - {$ref: '#/components/parameters/ListId'}
+    get:
+      operationId: getShoppingList
+      summary: Метаданные своего списка
+      responses:
+        '200': {$ref: '#/components/responses/ListResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    patch:
+      operationId: updateShoppingList
+      summary: Переименовать свой список
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateShoppingList'}
+      responses:
+        '200': {$ref: '#/components/responses/ListResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/BodyTooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteShoppingList
+      summary: Удалить свой список вместе с позициями
+      responses:
+        '204': {description: Список удалён; тело отсутствует}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /shopping-lists/{listId}/items:
+    parameters:
+      - {$ref: '#/components/parameters/ListId'}
+    get:
+      operationId: getShoppingItems
+      summary: Позиции выбранного своего списка
+      description: Порядок по id по возрастанию. Существующий пустой список — [].
+      responses:
+        '200':
+          description: Массив позиций
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ShoppingItem'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createShoppingItem
+      summary: Создать позицию в выбранном своём списке
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateShoppingItem'}
+      responses:
+        '201': {$ref: '#/components/responses/ItemResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/BodyTooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: clearShoppingList
+      summary: Удалить все позиции выбранного своего списка
+      description: Список сохраняется. Повторная очистка пустого списка также возвращает 204.
+      responses:
+        '204': {description: Список пуст; тело отсутствует}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /shopping-lists/{listId}/items/mark-all:
+    parameters:
+      - {$ref: '#/components/parameters/ListId'}
+    patch:
+      operationId: markAllShoppingItems
+      summary: Установить или снять отметки у всех позиций своего списка
+      description: Одно атомарное действие. Для существующего пустого списка также 204.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [isMarked]
+              properties:
+                isMarked: {type: boolean}
+      responses:
+        '204': {description: Отметки обновлены; тело отсутствует}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/BodyTooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /shopping-lists/{listId}/items/{itemId}:
+    parameters:
+      - {$ref: '#/components/parameters/ListId'}
+      - {$ref: '#/components/parameters/ItemId'}
+    get:
+      operationId: getShoppingItem
+      summary: Получить свою позицию в указанном списке
+      responses:
+        '200': {$ref: '#/components/responses/ItemResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    patch:
+      operationId: updateShoppingItem
+      summary: Изменить переданные поля своей позиции
+      description: >-
+        Отсутствующее поле не меняется. quantity:null снимает количество.
+        null в остальных полях запрещён. Пустое тело {} запрещено.
+        isMarked:false снимает отметку без изменения остальных полей.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateShoppingItem'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/BodyTooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteShoppingItem
+      summary: Удалить свою позицию из указанного списка
+      responses:
+        '204': {description: Позиция удалена; тело отсутствует}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ListId:
+      name: listId
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Id'}
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Id'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Ключ одного действия, например crypto.randomUUID(). Минимальный срок
+        хранения результата — 24 часа. Область: пользователь и POST-маршрут
+        с конкретным listId. Повтор нормализованного тела возвращает исходные
+        статус 201 и DTO; другое тело — 409. Проверка доступа обязательна
+        и при повторе. После удаления созданного ресурса — 409 resource_deleted.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: '^[A-Za-z0-9_-]{16,128}$'
+  schemas:
+    Id:
+      type: string
+      minLength: 1
+      maxLength: 19
+      pattern: '^[1-9][0-9]{0,18}$'
+      description: Положительный BIGINT до 9223372036854775807. JSON-числа запрещены.
+      example: '9007199254740993'
+    ListName:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: После обрезки краевых пробелов; длина в Unicode-кодовых точках. Управляющие символы запрещены.
+      example: Покупки на неделю
+    ItemName:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: После обрезки краевых пробелов; длина в Unicode-кодовых точках. Управляющие символы запрещены.
+      example: Молоко
+    Quantity:
+      type: string
+      nullable: true
+      maxLength: 13
+      pattern: '^(?!0(?:\.0{1,3})?$)(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,3})?$'
+      description: >-
+        null или decimal-строка от 0.001 до 999999999.999, не более 3 знаков
+        после точки. Знаки, запятая, экспонента и ведущие нули запрещены.
+        NUMERIC в БД, без преобразования в float/JS Number. Ответ убирает
+        лишние нули дробной части (1.000 → 1); null не подменяется нулём.
+      example: '0.125'
+    Unit:
+      type: string
+      maxLength: 32
+      description: Обрезать краевые пробелы; сохранить регистр. Управляющие символы запрещены. Пустая строка допустима.
+      example: кг
+    ShoppingList:
+      type: object
+      additionalProperties: false
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        name: {$ref: '#/components/schemas/ListName'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    ShoppingItem:
+      type: object
+      additionalProperties: false
+      required: [id, listId, name, quantity, unit, isMarked]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        listId: {$ref: '#/components/schemas/Id'}
+        name: {$ref: '#/components/schemas/ItemName'}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        unit: {$ref: '#/components/schemas/Unit'}
+        isMarked: {type: boolean}
+    CreateShoppingList:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {$ref: '#/components/schemas/ListName'}
+    CreateShoppingItem:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {$ref: '#/components/schemas/ItemName'}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        unit: {$ref: '#/components/schemas/Unit'}
+        isMarked: {type: boolean, default: false}
+    UpdateShoppingItem:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {$ref: '#/components/schemas/ItemName'}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        unit: {$ref: '#/components/schemas/Unit'}
+        isMarked: {type: boolean}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: {type: string, example: validation_failed}
+        message: {type: string, example: Проверьте поля запроса}
+        fieldErrors:
+          type: object
+          additionalProperties: {type: string}
+  responses:
+    ListResult:
+      description: Метаданные списка
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ShoppingList'}
+    ItemResult:
+      description: Позиция списка
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ShoppingItem'}
+    BadRequest:
+      description: Некорректный ID, JSON, поля или отсутствующий/некорректный Idempotency-Key
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthorized:
+      description: Требуется авторизация
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: Нет своего списка или позиции именно в нём; чужой ресурс даёт тот же ответ
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Conflict:
+      description: idempotency_conflict или resource_deleted
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    BodyTooLarge:
+      description: JSON превышает 65536 байт
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InternalError:
+      description: Ошибка сервера без внутренних деталей
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}

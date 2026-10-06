@@ -2,7 +2,10 @@ openapi: 3.0.3
 info:
   title: Shopping Manager API
   version: 0.1.0
-  description: Текущие HTTP-маршруты. Все URL используют базовый префикс /api.
+  description: >-
+    Текущие HTTP-маршруты. Все URL используют базовый префикс /api.
+    Планируемый контракт нескольких списков находится отдельно
+    в shopping-lists.openapi.yaml; эти маршруты ещё не реализованы.
 servers:
   - url: /api
 paths:
