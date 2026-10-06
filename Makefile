@@ -4,7 +4,7 @@ DEV_COMPOSE = $(COMPOSE) -f compose.dev.yaml
 MODE ?= dev
 ACTIVE_COMPOSE = $(if $(filter built,$(MODE)),$(COMPOSE),$(DEV_COMPOSE))
 
-.PHONY: init dev up down logs status restart migrate-up migrate-version frontend-check backend-check
+.PHONY: init dev up down logs status restart migrate-up migrate-version frontend-check backend-check frontend-test frontend-coverage backend-test backend-coverage backend-integration test-db-up
 
 init:
 	@if [ -f .env ]; then echo 'Root .env already exists; kept unchanged.'; \
@@ -45,3 +45,22 @@ frontend-check:
 
 backend-check:
 	$(DEV_COMPOSE) run --build --rm --no-deps backend sh -ec 'go mod verify && go test ./... && go vet ./... && go build -o /tmp/api-check ./cmd/api'
+
+frontend-test:
+	npm --prefix frontend run test
+
+frontend-coverage:
+	npm --prefix frontend run test:coverage
+
+backend-test:
+	cd backend && GOMODCACHE="$(CURDIR)/backend/.tools/go/pkg/mod" GOCACHE="$(CURDIR)/backend/.cache/go-build" go test ./...
+
+backend-coverage:
+	mkdir -p backend/.cache
+	cd backend && GOMODCACHE="$(CURDIR)/backend/.tools/go/pkg/mod" GOCACHE="$(CURDIR)/backend/.cache/go-build" go test ./... -coverprofile=.cache/coverage.out
+
+backend-integration:
+	docker compose -f compose.test.yaml run --build --rm backend-test
+
+test-db-up:
+	docker compose -f compose.test.yaml up -d --wait --wait-timeout 90 postgres-test
