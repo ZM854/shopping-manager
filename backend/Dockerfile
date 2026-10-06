@@ -12,6 +12,10 @@ COPY . .
 EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
+FROM dependencies AS testing
+COPY . .
+CMD ["go", "test", "-count=1", "-tags=integration", "./..."]
+
 FROM dependencies AS migration-builder
 RUN CGO_ENABLED=0 GOBIN=/out go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1 \
     && test -s /out/migrate
