@@ -32,7 +32,7 @@ Push-Location $backendRoot
 try {
     if ($Action -eq 'backend-coverage') {
         New-Item -ItemType Directory -Force -Path '.cache' | Out-Null
-        & go test ./... -coverprofile=.cache/coverage.out
+        & go test ./... '-coverprofile=.cache/coverage.out'
     } else {
         & go test ./...
     }

@@ -9,7 +9,7 @@ describe('TextField', () => {
     render(<TextField label="Название списка" onChange={onChange} />);
 
     const input = screen.getByRole('textbox', { name: 'Название списка' });
-    await userEvent.setup().type(input, 'Покупки');
+    await userEvent.setup({ delay: null }).type(input, 'Покупки');
 
     expect(input).toHaveValue('Покупки');
     expect(onChange).toHaveBeenCalled();
