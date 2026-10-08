@@ -16,26 +16,47 @@ var (
 	ErrInvalidActivation  = errors.New("invalid activation token")
 )
 
+type userStore interface {
+	Create(context.Context, CreateUserRequest) (User, error)
+	GetByEmail(context.Context, string) (User, error)
+	GetById(context.Context, int64) (User, error)
+	GetByActivationToken(context.Context, string) (User, error)
+	Update(context.Context, int64, UpdateUserRequest) (User, error)
+	GetAll(context.Context) ([]User, error)
+}
+
+type userTokens interface {
+	GenerateTokens(int64) (TokenPair, error)
+	SaveToken(context.Context, int64, string) error
+	ValidateRefreshToken(string) (*TokenClaims, error)
+	FindToken(context.Context, int64, string) (*RefreshToken, error)
+	RemoveToken(context.Context, int64) error
+}
+
+type activationMailer interface {
+	SendActivationMail(context.Context, string, string) error
+}
+
 type UserService struct {
-	log *slog.Logger
-	userRepository *UserRepository
-	tokenService *TokenService
-	mailService *MailService
+	log               *slog.Logger
+	userRepository    userStore
+	tokenService      userTokens
+	mailService       activationMailer
 	activationBaseUrl string
 }
 
 func NewUserService(
-	log *slog.Logger, 
-	userRepository *UserRepository,
-	tokenService *TokenService,
-	mailService *MailService,
+	log *slog.Logger,
+	userRepository userStore,
+	tokenService userTokens,
+	mailService activationMailer,
 	activationBaseUrl string,
 ) *UserService {
 	return &UserService{
-		log: log.With("component", "service", "entity", "user"),
-		userRepository: userRepository,
-		tokenService: tokenService,
-		mailService: mailService,
+		log:               log.With("component", "service", "entity", "user"),
+		userRepository:    userRepository,
+		tokenService:      tokenService,
+		mailService:       mailService,
 		activationBaseUrl: activationBaseUrl,
 	}
 }
@@ -46,7 +67,7 @@ func (s *UserService) Registration(
 	email string,
 	password string,
 
-) (AuthResponse, error)  {
+) (AuthResponse, error) {
 	passwordHash, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		bcrypt.DefaultCost,
@@ -62,9 +83,9 @@ func (s *UserService) Registration(
 	user, err := s.userRepository.Create(
 		ctx,
 		CreateUserRequest{
-			Name: name,
-			Email: email,
-			PasswordHash: string(passwordHash),
+			Name:            name,
+			Email:           email,
+			PasswordHash:    string(passwordHash),
 			ActivationToken: activationToken,
 		},
 	)
@@ -81,8 +102,8 @@ func (s *UserService) Registration(
 		ctx,
 		email,
 		fmt.Sprintf(
-			"%s/%s", 
-			s.activationBaseUrl, 
+			"%s/%s",
+			s.activationBaseUrl,
 			activationToken,
 		),
 	)
@@ -101,7 +122,7 @@ func (s *UserService) Registration(
 	}
 
 	return AuthResponse{
-		User: NewUserDTO(user),
+		User:      NewUserDTO(user),
 		TokenPair: tokens,
 	}, nil
 }
@@ -111,7 +132,7 @@ func (s *UserService) Activate(ctx context.Context, activationLink string) error
 
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			return  ErrInvalidActivation
+			return ErrInvalidActivation
 		}
 		return err
 	}
@@ -119,9 +140,9 @@ func (s *UserService) Activate(ctx context.Context, activationLink string) error
 		ctx,
 		user.ID,
 		UpdateUserRequest{
-			Name: user.Name,
-			Email: user.Email,
-			PasswordHash: user.PasswordHash,
+			Name:            user.Name,
+			Email:           user.Email,
+			PasswordHash:    user.PasswordHash,
 			IsEmailVerified: true,
 			ActivationToken: "",
 		},
@@ -130,7 +151,7 @@ func (s *UserService) Activate(ctx context.Context, activationLink string) error
 	return err
 }
 
-func (s *UserService) Login(ctx context.Context, email string, password string) (AuthResponse, error)  {
+func (s *UserService) Login(ctx context.Context, email string, password string) (AuthResponse, error) {
 
 	user, err := s.userRepository.GetByEmail(ctx, email)
 
@@ -158,16 +179,16 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 		return AuthResponse{}, err
 	}
 
-    if err = s.tokenService.SaveToken(
-		ctx, 
-		user.ID, 
+	if err = s.tokenService.SaveToken(
+		ctx,
+		user.ID,
 		tokens.RefreshToken,
 	); err != nil {
 		return AuthResponse{}, err
 	}
 
 	return AuthResponse{
-		User: NewUserDTO(user),
+		User:      NewUserDTO(user),
 		TokenPair: tokens,
 	}, err
 }
@@ -182,7 +203,7 @@ func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
 	return s.tokenService.RemoveToken(ctx, claims.UserID)
 }
 
-func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthResponse, error)  {
+func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthResponse, error) {
 	claims, err := s.tokenService.ValidateRefreshToken(refreshToken)
 
 	if err != nil {
@@ -214,7 +235,7 @@ func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthRes
 	}
 
 	return AuthResponse{
-		User: NewUserDTO(user),
+		User:      NewUserDTO(user),
 		TokenPair: tokens,
 	}, nil
 }

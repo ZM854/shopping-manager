@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -13,15 +14,24 @@ const (
 	refreshCookieAge  = 30 * 24 * 60 * 60
 )
 
+type authService interface {
+	Registration(context.Context, string, string, string) (AuthResponse, error)
+	Login(context.Context, string, string) (AuthResponse, error)
+	Logout(context.Context, string) error
+	Activate(context.Context, string) error
+	Refresh(context.Context, string) (AuthResponse, error)
+	GetAllUsers(context.Context) ([]User, error)
+}
+
 type AuthHandler struct {
-	userService       *UserService
+	userService       authService
 	log               *slog.Logger
 	clientRedirectURL string
 }
 
 func NewAuthHandler(
 	log *slog.Logger,
-	userService *UserService,
+	userService authService,
 	clientRedirectURL string,
 ) *AuthHandler {
 	return &AuthHandler{

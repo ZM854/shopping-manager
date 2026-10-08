@@ -15,26 +15,31 @@ var (
 	ErrInvalidToken = errors.New("invalid token")
 )
 
-type TokenService struct {
-	log *slog.Logger
-	tokenRepository *TokenRepository
+type tokenStore interface {
+	Save(context.Context, int64, string) error
+	FindByUserId(context.Context, int64) (RefreshToken, error)
+	DeleteByUserId(context.Context, int64) error
+}
 
-	accessSecret []byte
+type TokenService struct {
+	log             *slog.Logger
+	tokenRepository tokenStore
+
+	accessSecret  []byte
 	refreshSecret []byte
 
-	accessTTL time.Duration
+	accessTTL  time.Duration
 	refreshTTL time.Duration
-
 }
 
 type TokenClaims struct {
 	UserID int64 `json:"user_id"`
-    jwt.RegisteredClaims
+	jwt.RegisteredClaims
 }
 
 func NewTokenService(
-	log *slog.Logger, 
-	tokenRepository *TokenRepository,
+	log *slog.Logger,
+	tokenRepository tokenStore,
 	accessSecret string,
 	refreshSecret string,
 	accessTTL time.Duration,
@@ -42,11 +47,11 @@ func NewTokenService(
 ) *TokenService {
 	return &TokenService{
 		tokenRepository: tokenRepository,
-		log: log.With("component", "service", "entity", "refresh_token"),
-		accessSecret: []byte(accessSecret),
-		refreshSecret: []byte(refreshSecret),
-		accessTTL: accessTTL,
-		refreshTTL: refreshTTL,
+		log:             log.With("component", "service", "entity", "refresh_token"),
+		accessSecret:    []byte(accessSecret),
+		refreshSecret:   []byte(refreshSecret),
+		accessTTL:       accessTTL,
+		refreshTTL:      refreshTTL,
 	}
 }
 
@@ -56,8 +61,8 @@ func (s *TokenService) GenerateTokens(userId int64) (TokenPair, error) {
 	accessClaims := TokenClaims{
 		UserID: userId,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject: "access",
-			IssuedAt: jwt.NewNumericDate(now),
+			Subject:   "access",
+			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
 		},
 	}
@@ -65,8 +70,8 @@ func (s *TokenService) GenerateTokens(userId int64) (TokenPair, error) {
 	refreshClaims := TokenClaims{
 		UserID: userId,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject: "refresh",
-			IssuedAt: jwt.NewNumericDate(now),
+			Subject:   "refresh",
+			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
 		},
 	}
@@ -91,7 +96,7 @@ func (s *TokenService) GenerateTokens(userId int64) (TokenPair, error) {
 
 	s.log.Debug("tokens generated", "user_id", userId)
 	return TokenPair{
-		AccesToken: accessToken,
+		AccesToken:   accessToken,
 		RefreshToken: refreshToken,
 	}, nil
 }
@@ -108,7 +113,7 @@ func (s *TokenService) validateToken(tokenString string, secret []byte) (*TokenC
 	claims := &TokenClaims{}
 
 	token, err := jwt.ParseWithClaims(
-		tokenString, 
+		tokenString,
 		claims,
 		func(t *jwt.Token) (any, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -132,7 +137,7 @@ func (s *TokenService) validateToken(tokenString string, secret []byte) (*TokenC
 
 func (s *TokenService) SaveToken(ctx context.Context, userId int64, refreshToken string) error {
 	sum := sha256.Sum256([]byte(refreshToken))
- 	hash := hex.EncodeToString(sum[:])
+	hash := hex.EncodeToString(sum[:])
 
 	if err := s.tokenRepository.Save(ctx, userId, string(hash)); err != nil {
 		s.log.Error("failed to save refresh token", "user_id", userId, "error", err)
@@ -164,7 +169,7 @@ func (s *TokenService) FindToken(ctx context.Context, userId int64, refreshToken
 	}
 
 	sum := sha256.Sum256([]byte(refreshToken))
- 	hash := hex.EncodeToString(sum[:])
+	hash := hex.EncodeToString(sum[:])
 
 	if hash != token.TokenHash {
 		return nil, ErrInvalidToken
