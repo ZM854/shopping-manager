@@ -5,10 +5,29 @@ import { describe, expect, it } from 'vitest';
 
 const contractPath = fileURLToPath(new URL('../../../backend/api/shopping-lists.openapi.yaml', import.meta.url));
 
-describe('Планируемый OpenAPI списков', () => {
+describe('OpenAPI списков', () => {
   it('имеет валидную структуру и разрешимые ссылки', async () => {
     const document = await SwaggerParser.validate(contractPath);
-    expect(document.info.version).toBe('0.2.0-planned');
+    expect(document.info.version).toBe('0.2.0');
+  });
+
+  it('основной OpenAPI подключает все shopping-маршруты с авторизацией и удаляет products', async () => {
+    const apiPath = fileURLToPath(new URL('../../../backend/api/openapi.yaml', import.meta.url));
+    const document = await SwaggerParser.validate(apiPath);
+    expect(document.paths?.['/products']).toBeUndefined();
+    expect(document.paths?.['/products/{id}']).toBeUndefined();
+    let operations = 0;
+    for (const [path, entry] of Object.entries(document.paths ?? {})) {
+      if (!path.startsWith('/shopping-lists')) continue;
+      for (const method of ['get', 'post', 'patch', 'delete'] as const) {
+        const operation = entry?.[method];
+        if (!operation) continue;
+        operations++;
+        expect(operation.security).toEqual([{ bearerAuth: [] }]);
+        expect(operation.responses?.['401']).toBeDefined();
+      }
+    }
+    expect(operations).toBe(12);
   });
 
   it('фиксирует границы decimal-строки', async () => {

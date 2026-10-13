@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
-import { apiFetch } from './api';
+import { ApiError, apiFetch } from './api';
 import {
   clearAccessToken,
   getAccessToken,
@@ -17,6 +17,76 @@ beforeEach(() => {
 });
 
 describe('API-клиент', () => {
+  it('сохраняет статус, код и поля ошибок нового API', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        {
+          code: 'validation_failed',
+          message: 'Проверьте поля',
+          fieldErrors: { name: 'Пустое имя', ignored: 7 },
+        },
+        { status: 400 },
+      ),
+    );
+    await expect(apiFetch('/shopping-lists')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 400,
+      code: 'validation_failed',
+      message: 'Проверьте поля',
+      fieldErrors: { name: 'Пустое имя' },
+    });
+    for (const fieldErrors of [undefined, null, ['invalid'], 'invalid']) {
+      fetchMock.mockResolvedValueOnce(
+        Response.json(
+          {
+            code: 'idempotency_conflict',
+            message: 'Другой запрос',
+            fieldErrors,
+          },
+          { status: 409 },
+        ),
+      );
+      await expect(apiFetch('/shopping-lists')).rejects.toMatchObject({
+        status: 409,
+        code: 'idempotency_conflict',
+        fieldErrors: undefined,
+      });
+    }
+    for (const body of [
+      null,
+      [],
+      'invalid',
+      { error: 'legacy' },
+      { code: 1, message: 'invalid' },
+      { code: 'invalid' },
+    ]) {
+      fetchMock.mockResolvedValueOnce(Response.json(body, { status: 500 }));
+      await expect(apiFetch('/shopping-lists')).rejects.toEqual(
+        new ApiError(500),
+      );
+    }
+  });
+  it('повтор после refresh сохраняет Idempotency-Key и decimal-строку', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ accessToken: 'new' }))
+      .mockResolvedValueOnce(
+        Response.json({ id: '9007199254740993', quantity: '999999999.999' }),
+      );
+    const body = '{"name":"Молоко","quantity":"999999999.999"}';
+    await apiFetch('/shopping-lists/1/items', {
+      method: 'POST',
+      body,
+      headers: { 'Idempotency-Key': 'same-action-00001' },
+    });
+    for (const index of [0, 2]) {
+      const [, options] = fetchMock.mock.calls[index];
+      expect(new Headers(options?.headers).get('Idempotency-Key')).toBe(
+        'same-action-00001',
+      );
+      expect(options?.body).toBe(body);
+    }
+  });
   it('передаёт bearer, cookies, тело и пользовательские заголовки', async () => {
     setAccessToken('test-access');
     fetchMock.mockResolvedValue(Response.json({ id: 7 }));
