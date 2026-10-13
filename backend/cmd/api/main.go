@@ -9,8 +9,8 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/logger"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
-	"github.com/ZM854/shopping-manager/backend/internal/product"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
+	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 )
 
 func main() {
@@ -34,9 +34,9 @@ func main() {
 
 	log.Info("initializing dependencies")
 
-	productRepo := product.NewProductRepository(db, log)
-	productService := product.NewProductService(productRepo, log)
-	productHandler := product.NewProductHandler(productService, log)
+	shoppingRepo := shopping.NewRepository(db)
+	shoppingService := shopping.NewService(shoppingRepo)
+	shoppingHandler := shopping.NewHandler(shoppingService, log)
 
 	tokenRepo := auth.NewTokenRepository(db, log)
 	tokenService := auth.NewTokenService(
@@ -85,7 +85,7 @@ func main() {
 
 	router := router.New(
 		log,
-		productHandler,
+		shoppingHandler,
 		authHandler,
 		authMiddleware,
 		cfg.FrontendURL,

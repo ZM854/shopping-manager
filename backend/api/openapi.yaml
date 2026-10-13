@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: Shopping Manager API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Текущие HTTP-маршруты. Все URL используют базовый префикс /api.
-    Планируемый контракт нескольких списков находится отдельно
-    в shopping-lists.openapi.yaml; эти маршруты ещё не реализованы.
+    Списки покупок реализованы; их схемы находятся
+    в shopping-lists.openapi.yaml. Старые /products удалены.
 servers:
   - url: /api
 paths:
@@ -92,65 +92,16 @@ paths:
       responses:
         '200': {description: Список пользователей}
         '500': {description: Ошибка сервера}
-  /products:
-    get:
-      summary: Позиции текущего пользователя
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Массив позиций}
-        '401': {description: Требуется авторизация}
-        '500': {description: Ошибка сервера}
-    post:
-      summary: Создание позиции
-      security: [{bearerAuth: []}]
-      requestBody: {$ref: '#/components/requestBodies/Product'}
-      responses:
-        '201': {description: Позиция создана}
-        '400': {description: Некорректное тело запроса}
-        '401': {description: Требуется авторизация}
-        '500': {description: Ошибка сервера}
-    delete:
-      summary: Очистка позиций текущего пользователя
-      security: [{bearerAuth: []}]
-      responses:
-        '204': {description: Позиции удалены}
-        '401': {description: Требуется авторизация}
-        '404': {description: Позиции не найдены}
-        '500': {description: Ошибка сервера}
-  /products/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema: {type: integer, format: int64}
-    get:
-      summary: Получение своей позиции
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Позиция}
-        '400': {description: Некорректный идентификатор}
-        '401': {description: Требуется авторизация}
-        '404': {description: Позиция не найдена}
-        '500': {description: Ошибка сервера}
-    put:
-      summary: Изменение своей позиции
-      security: [{bearerAuth: []}]
-      requestBody: {$ref: '#/components/requestBodies/Product'}
-      responses:
-        '200': {description: Позиция обновлена}
-        '400': {description: Некорректный запрос}
-        '401': {description: Требуется авторизация}
-        '404': {description: Позиция не найдена}
-        '500': {description: Ошибка сервера}
-    delete:
-      summary: Удаление своей позиции
-      security: [{bearerAuth: []}]
-      responses:
-        '204': {description: Позиция удалена}
-        '400': {description: Некорректный идентификатор}
-        '401': {description: Требуется авторизация}
-        '404': {description: Позиция не найдена}
-        '500': {description: Ошибка сервера}
+  /shopping-lists:
+    $ref: './shopping-lists.openapi.yaml#/paths/~1shopping-lists'
+  /shopping-lists/{listId}:
+    $ref: './shopping-lists.openapi.yaml#/paths/~1shopping-lists~1{listId}'
+  /shopping-lists/{listId}/items:
+    $ref: './shopping-lists.openapi.yaml#/paths/~1shopping-lists~1{listId}~1items'
+  /shopping-lists/{listId}/items/mark-all:
+    $ref: './shopping-lists.openapi.yaml#/paths/~1shopping-lists~1{listId}~1items~1mark-all'
+  /shopping-lists/{listId}/items/{itemId}:
+    $ref: './shopping-lists.openapi.yaml#/paths/~1shopping-lists~1{listId}~1items~1{itemId}'
 components:
   securitySchemes:
     bearerAuth:
@@ -161,15 +112,3 @@ components:
       type: apiKey
       in: cookie
       name: refreshToken
-  requestBodies:
-    Product:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              name: {type: string}
-              quantity: {type: number, format: float}
-              unit: {type: string}
-              isMarked: {type: boolean}

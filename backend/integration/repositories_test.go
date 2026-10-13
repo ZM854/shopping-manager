@@ -23,6 +23,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
+	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 	"github.com/ZM854/shopping-manager/backend/internal/testutil/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -201,12 +202,14 @@ func (m *activationCapture) SendActivationMail(_ context.Context, _ string, link
 	return nil
 }
 func TestAuthHTTPWithPostgres(t *testing.T) {
-	_, users, items, tokens, log := repoFixture(t)
+	pool, users, _, tokens, log := repoFixture(t)
+	testdb.ApplyMigrations(t, pool, 3, 5)
 	tokenService := auth.NewTokenService(log, tokens, "test-access-secret", "test-refresh-secret", time.Minute, time.Hour)
 	mail := &activationCapture{}
-	engine := router.New(log, product.NewProductHandler(product.NewProductService(items, log), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://example.test/api/activate"), "http://client.example.test/login"), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
+	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://example.test/api/activate"), "http://client.example.test/login"), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
 	request := func(method, path, body, bearer string, cookie *http.Cookie) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Idempotency-Key", "auth-http-action-01")
 		if bearer != "" {
 			req.Header.Set("Authorization", "Bearer "+bearer)
 		}
@@ -238,11 +241,19 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookie := login.Result().Cookies()[0]
-	created := request("POST", "/api/products", `{"name":"Молоко","quantity":1.5,"unit":"л"}`, session.AccesToken, nil)
+	listResponse := request("POST", "/api/shopping-lists", `{"name":"Покупки"}`, session.AccesToken, nil)
+	var list shopping.List
+	if listResponse.Code != 201 {
+		t.Fatalf("List failed: %s", listResponse.Body.String())
+	}
+	if err := json.Unmarshal(listResponse.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	created := request("POST", fmt.Sprintf("/api/shopping-lists/%d/items", list.ID), `{"name":"Молоко","quantity":"1.5","unit":"л"}`, session.AccesToken, nil)
 	if created.Code != 201 {
 		t.Fatalf("Product failed: %s", created.Body.String())
 	}
-	var item product.Product
+	var item shopping.Item
 	if err := json.Unmarshal(created.Body.Bytes(), &item); err != nil {
 		t.Fatal(err)
 	}
@@ -251,9 +262,9 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := fmt.Sprintf("/api/products/%d", item.ID)
-	for _, method := range []string{"GET", "PUT", "DELETE"} {
-		w := request(method, path, `{"name":"foreign","quantity":1}`, secondTokens.AccesToken, nil)
+	path := fmt.Sprintf("/api/shopping-lists/%d/items/%d", list.ID, item.ID)
+	for _, method := range []string{"GET", "PATCH", "DELETE"} {
+		w := request(method, path, `{"name":"foreign","quantity":"1"}`, secondTokens.AccesToken, nil)
 		if w.Code != 404 {
 			t.Fatalf("Foreign %s returned %d", method, w.Code)
 		}

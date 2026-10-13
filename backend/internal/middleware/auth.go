@@ -11,7 +11,7 @@ import (
 
 const (
 	authorizationHeader = "Authorization"
-	bearerPrefix = "Bearer "
+	bearerPrefix        = "Bearer "
 )
 
 type TokenValidator interface {
@@ -28,21 +28,28 @@ func NewAuthMiddleware(validator TokenValidator) *AuthMiddleware {
 	}
 }
 
-func (m *AuthMiddleware) HandleAuth() gin.HandlerFunc  {
+func (m *AuthMiddleware) HandleAuth() gin.HandlerFunc { return m.handleAuth(false) }
+
+func (m *AuthMiddleware) HandleShoppingAuth() gin.HandlerFunc { return m.handleAuth(true) }
+
+func (m *AuthMiddleware) handleAuth(shopping bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		deny := func(message string) {
+			if shopping {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "unauthorized", "message": "Требуется авторизация"})
+			} else {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": message})
+			}
+		}
 		header := c.GetHeader(authorizationHeader)
 
 		if header == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "authorization header is missing",
-			})
+			deny("authorization header is missing")
 			return
 		}
 
 		if !strings.HasPrefix(header, bearerPrefix) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "invalid authorization header",
-			})
+			deny("invalid authorization header")
 			return
 		}
 
@@ -52,15 +59,15 @@ func (m *AuthMiddleware) HandleAuth() gin.HandlerFunc  {
 
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidToken) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-					"error": "invalid access token",
-				})
+				deny("invalid access token")
 				return
 			}
 
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "failed to validate access token",
-			})
+			deny("failed to validate access token")
+			return
+		}
+		if claims == nil || claims.UserID <= 0 {
+			deny("invalid access token")
 			return
 		}
 

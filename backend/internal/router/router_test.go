@@ -9,14 +9,14 @@ import (
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
-	"github.com/ZM854/shopping-manager/backend/internal/product"
+	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 )
 
 func TestAPIPrefixAndAuthorization(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	engine := New(
 		log,
-		product.NewProductHandler(nil, log),
+		shopping.NewHandler(nil, log),
 		auth.NewAuthHandler(log, nil, "http://localhost:5173/login"),
 		middleware.NewAuthMiddleware(nil),
 		"http://localhost:5173",
@@ -29,12 +29,19 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/healthz", http.StatusOK},
 		{http.MethodGet, "/healthz", http.StatusNotFound},
-		{http.MethodGet, "/api/products", http.StatusUnauthorized},
-		{http.MethodPost, "/api/products", http.StatusUnauthorized},
-		{http.MethodPut, "/api/products/1", http.StatusUnauthorized},
-		{http.MethodGet, "/api/products/1", http.StatusUnauthorized},
-		{http.MethodDelete, "/api/products/1", http.StatusUnauthorized},
-		{http.MethodDelete, "/api/products", http.StatusUnauthorized},
+		{http.MethodGet, "/api/shopping-lists", http.StatusUnauthorized},
+		{http.MethodPost, "/api/shopping-lists", http.StatusUnauthorized},
+		{http.MethodPatch, "/api/shopping-lists/1", http.StatusUnauthorized},
+		{http.MethodGet, "/api/shopping-lists/1", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/shopping-lists/1", http.StatusUnauthorized},
+		{http.MethodGet, "/api/shopping-lists/1/items", http.StatusUnauthorized},
+		{http.MethodPost, "/api/shopping-lists/1/items", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/shopping-lists/1/items", http.StatusUnauthorized},
+		{http.MethodPatch, "/api/shopping-lists/1/items/mark-all", http.StatusUnauthorized},
+		{http.MethodGet, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
+		{http.MethodPatch, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
+		{http.MethodGet, "/api/products", http.StatusNotFound},
 		{http.MethodGet, "/products", http.StatusNotFound},
 		// Public auth routes must reach validation without requiring a bearer token.
 		{http.MethodPost, "/api/login", http.StatusBadRequest},
@@ -54,15 +61,15 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 
 func TestCORSAllowedAndRejectedOrigins(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := New(log, product.NewProductHandler(nil, log), auth.NewAuthHandler(log, nil, "http://client.example.test/login"), middleware.NewAuthMiddleware(nil), "http://client.example.test")
+	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, "http://client.example.test/login"), middleware.NewAuthMiddleware(nil), "http://client.example.test")
 	for _, test := range []struct {
 		origin string
 		status int
 	}{{"http://client.example.test", 204}, {"https://foreign.example.test", 403}} {
-		request := httptest.NewRequest(http.MethodOptions, "/api/products", nil)
+		request := httptest.NewRequest(http.MethodOptions, "/api/shopping-lists", nil)
 		request.Header.Set("Origin", test.origin)
 		request.Header.Set("Access-Control-Request-Method", "POST")
-		request.Header.Set("Access-Control-Request-Headers", "Authorization,Content-Type")
+		request.Header.Set("Access-Control-Request-Headers", "Authorization,Content-Type,Idempotency-Key")
 		response := httptest.NewRecorder()
 		engine.ServeHTTP(response, request)
 		if response.Code != test.status {

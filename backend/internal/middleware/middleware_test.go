@@ -16,6 +16,45 @@ type validatorFunc func(string) (*auth.TokenClaims, error)
 
 func (f validatorFunc) ValidateAccessToken(s string) (*auth.TokenClaims, error) { return f(s) }
 
+func TestShoppingAuthorizationErrorsAndClaims(t *testing.T) {
+	for _, tc := range []struct {
+		header string
+		claims *auth.TokenClaims
+		err    error
+		status int
+	}{
+		{"", nil, nil, 401}, {"Basic abc", nil, nil, 401}, {"Bearer invalid", nil, auth.ErrInvalidToken, 401},
+		{"Bearer failure", nil, errors.New("secret validator failure"), 401}, {"Bearer nil", nil, nil, 401},
+		{"Bearer zero", &auth.TokenClaims{}, nil, 401}, {"Bearer negative", &auth.TokenClaims{UserID: -1}, nil, 401},
+		{"Bearer valid", &auth.TokenClaims{UserID: 42}, nil, 204},
+	} {
+		r := gin.New()
+		r.Use(NewAuthMiddleware(validatorFunc(func(string) (*auth.TokenClaims, error) { return tc.claims, tc.err })).HandleShoppingAuth())
+		r.GET("/private", func(c *gin.Context) {
+			if c.GetInt64("userID") != 42 {
+				t.Fatal("Wrong owner")
+			}
+			c.Status(204)
+		})
+		req := httptest.NewRequest("GET", "/private", nil)
+		req.Header.Set("Authorization", tc.header)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != tc.status {
+			t.Fatalf("%s: %d", tc.header, w.Code)
+		}
+		if tc.status == 401 {
+			var body map[string]string
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body["code"] != "unauthorized" || body["message"] == "" || body["error"] != "" {
+				t.Fatal("Shopping error format lost", body)
+			}
+		}
+	}
+}
+
 func TestAuthorizationStopsInvalidRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tc := range []struct {

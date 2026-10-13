@@ -7,14 +7,14 @@ import (
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
-	"github.com/ZM854/shopping-manager/backend/internal/product"
+	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func New(
 	log *slog.Logger,
-	productHandler *product.ProductHandler,
+	shoppingHandler *shopping.Handler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
 	frontendURL string,
@@ -42,6 +42,7 @@ func New(
 			"Content-Type",
 			"Accept",
 			"Authorization",
+			"Idempotency-Key",
 		},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -58,14 +59,9 @@ func New(
 	api.POST("/refresh", authHandler.Refresh)
 	api.GET("/users", authHandler.GetUsers)
 
-	api.Use(authMiddleware.HandleAuth())
-
-	api.GET("/products", productHandler.GetProducts)
-	api.GET("/products/:id", productHandler.GetProduct)
-	api.POST("/products", productHandler.CreateProduct)
-	api.PUT("/products/:id", productHandler.UpdateProduct)
-	api.DELETE("/products/:id", productHandler.DeleteProduct)
-	api.DELETE("/products", productHandler.DeleteAllProducts)
+	shoppingAPI := api.Group("")
+	shoppingAPI.Use(authMiddleware.HandleShoppingAuth())
+	shoppingHandler.Register(shoppingAPI)
 
 	return router
 }
