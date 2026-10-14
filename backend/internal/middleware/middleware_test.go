@@ -29,7 +29,10 @@ func TestShoppingAuthorizationErrorsAndClaims(t *testing.T) {
 		{"Bearer valid", &auth.TokenClaims{UserID: 42}, nil, 204},
 	} {
 		r := gin.New()
-		r.Use(NewAuthMiddleware(validatorFunc(func(string) (*auth.TokenClaims, error) { return tc.claims, tc.err })).HandleShoppingAuth())
+		validator := validatorFunc(func(string) (*auth.TokenClaims, error) {
+			return tc.claims, tc.err
+		})
+		r.Use(NewAuthMiddleware(validator).HandleAuth())
 		r.GET("/private", func(c *gin.Context) {
 			if c.GetInt64("userID") != 42 {
 				t.Fatal("Wrong owner")
@@ -62,7 +65,13 @@ func TestAuthorizationStopsInvalidRequests(t *testing.T) {
 		err    error
 		want   int
 		calls  int
-	}{{"", nil, 401, 0}, {"Basic abc", nil, 401, 0}, {"Bearer valid", nil, 200, 1}, {"Bearer invalid", auth.ErrInvalidToken, 401, 1}, {"Bearer failed", errors.New("validator failure"), 401, 1}} {
+	}{
+		{"", nil, 401, 0},
+		{"Basic abc", nil, 401, 0},
+		{"Bearer valid", nil, 200, 1},
+		{"Bearer invalid", auth.ErrInvalidToken, 401, 1},
+		{"Bearer failed", errors.New("validator failure"), 401, 1},
+	} {
 		t.Run(tc.header, func(t *testing.T) {
 			calls, handled := 0, false
 			r := gin.New()
@@ -115,7 +124,9 @@ func TestRequestLoggerStatusAndSafePath(t *testing.T) {
 		if entry["level"] != tc.level || entry["path"] != "/resource/:id" || entry["status"] != float64(tc.status) {
 			t.Fatalf("Unexpected entry: %s", buf.String())
 		}
-		if bytes.Contains(buf.Bytes(), []byte("test-secret")) || bytes.Contains(buf.Bytes(), []byte("test-token")) || bytes.Contains(buf.Bytes(), []byte("private-value")) {
+		if bytes.Contains(buf.Bytes(), []byte("test-secret")) ||
+			bytes.Contains(buf.Bytes(), []byte("test-token")) ||
+			bytes.Contains(buf.Bytes(), []byte("private-value")) {
 			t.Fatal("Request secrets leaked")
 		}
 	}

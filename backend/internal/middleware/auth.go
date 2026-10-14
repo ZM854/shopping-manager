@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -28,51 +27,26 @@ func NewAuthMiddleware(validator TokenValidator) *AuthMiddleware {
 	}
 }
 
-func (m *AuthMiddleware) HandleAuth() gin.HandlerFunc { return m.handleAuth(false) }
-
-func (m *AuthMiddleware) HandleShoppingAuth() gin.HandlerFunc { return m.handleAuth(true) }
-
-func (m *AuthMiddleware) handleAuth(shopping bool) gin.HandlerFunc {
+func (m *AuthMiddleware) HandleAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		deny := func(message string) {
-			if shopping {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "unauthorized", "message": "Требуется авторизация"})
-			} else {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": message})
-			}
+		deny := func() {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    "unauthorized",
+				"message": "Требуется авторизация",
+			})
 		}
 		header := c.GetHeader(authorizationHeader)
-
-		if header == "" {
-			deny("authorization header is missing")
-			return
-		}
-
 		if !strings.HasPrefix(header, bearerPrefix) {
-			deny("invalid authorization header")
+			deny()
 			return
 		}
-
 		token := strings.TrimPrefix(header, bearerPrefix)
-
 		claims, err := m.validator.ValidateAccessToken(token)
-
-		if err != nil {
-			if errors.Is(err, auth.ErrInvalidToken) {
-				deny("invalid access token")
-				return
-			}
-
-			deny("failed to validate access token")
+		if err != nil || claims == nil || claims.UserID <= 0 {
+			deny()
 			return
 		}
-		if claims == nil || claims.UserID <= 0 {
-			deny("invalid access token")
-			return
-		}
-
 		c.Set("userID", claims.UserID)
-
 		c.Next()
 	}
 }

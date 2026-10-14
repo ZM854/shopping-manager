@@ -60,7 +60,7 @@ func New(
 	api.GET("/users", authHandler.GetUsers)
 
 	shoppingAPI := api.Group("")
-	shoppingAPI.Use(authMiddleware.HandleShoppingAuth())
+	shoppingAPI.Use(authMiddleware.HandleAuth())
 	shoppingHandler.Register(shoppingAPI)
 
 	return router
