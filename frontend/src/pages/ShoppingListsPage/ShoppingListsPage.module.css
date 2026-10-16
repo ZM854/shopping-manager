@@ -1,0 +1,21 @@
+.page {
+  display: grid;
+  gap: 16px;
+}
+.lists {
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 16px;
+}
+.lists li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.lists a {
+  flex: 1;
+  overflow-wrap: anywhere;
+  min-width: 120px;
+}

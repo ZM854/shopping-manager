@@ -1,91 +1,88 @@
-import { useState } from "react";
-import type { Product, UpdateProductRequest } from "../../models/product";
-import cls from "./ProductForm.module.css";
-import type { ProductFormData } from "./ProductForm.types";
-import Checkbox from "../UI/input/Checkbox/Checkbox";
-import TextField from "../UI/input/TextField/TextField";
-import Button from "../UI/button/Button/Button";
+import { useState } from 'react';
+import type {
+  CreateShoppingItemRequest,
+  ShoppingItem,
+} from '../../models/shoppingList';
+import { useSubmission } from '../../hooks/useSubmission';
+import {
+  normalizeQuantity,
+  normalizeText,
+} from '../../shared/shoppingValidation';
+import cls from './ProductForm.module.css';
+import Checkbox from '../UI/input/Checkbox/Checkbox';
+import TextField from '../UI/input/TextField/TextField';
+import Button from '../UI/button/Button/Button';
 
 type ProductFormProps = {
-  product: Product | null;
-  onSave: (productData: UpdateProductRequest) => void;
+  product: ShoppingItem | null;
+  onSave: (data: CreateShoppingItemRequest, key: string) => Promise<void>;
 };
 
 const ProductForm = ({ product, onSave }: ProductFormProps) => {
-  const [formData, setFormData] = useState<ProductFormData>(
-    product
-      ? { ...product, quantity: product.quantity.toString() }
-      : {
-          name: "",
-          quantity: "",
-          unit: "",
-          isMarked: false,
-        },
-  );
-
-  const handleSubmit = (e: React.SubmitEvent) => {
-    e.preventDefault();
-
-    if (!formData.name.trim()) return;
-
-    onSave({ ...formData, quantity: Number(formData.quantity) });
-  };
+  const [name, setName] = useState(product?.name ?? '');
+  const [quantity, setQuantity] = useState(product?.quantity ?? '');
+  const [unit, setUnit] = useState(product?.unit ?? '');
+  const [isMarked, setIsMarked] = useState(product?.isMarked ?? false);
+  const submission = useSubmission();
 
   return (
-    <form className={cls.form} onSubmit={handleSubmit}>
-      <TextField
-        label="Название"
-        value={formData.name}
-        placeholder="Например, Молоко"
-        required
-        onChange={(e) =>
-          setFormData((prev) => ({
-            ...prev,
-            name: e.target.value,
-          }))
-        }
-      />
-
-      <TextField
-        label="Количество"
-        type="number"
-        step="any"
-        min={0}
-        value={formData.quantity}
-        onChange={(e) =>
-          setFormData((prev) => ({
-            ...prev,
-            quantity: e.target.value,
-          }))
-        }
-      />
-
-      <TextField
-        label="Единица измерения"
-        placeholder="шт., кг, л..."
-        value={formData.unit}
-        onChange={(e) =>
-          setFormData((prev) => ({
-            ...prev,
-            unit: e.target.value,
-          }))
-        }
-      />
-
-      {product && (
-        <Checkbox
-          label="Отметить как купленный"
-          checked={formData.isMarked}
-          onChange={(e) =>
-            setFormData((prev) => ({
-              ...prev,
-              isMarked: e.target.checked,
-            }))
-          }
+    <form
+      className={cls.form}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submission.submit(async (key) => {
+          const data = {
+            name: normalizeText(name, 200),
+            quantity: normalizeQuantity(quantity),
+            unit: normalizeText(unit, 32, false),
+            isMarked,
+          };
+          await onSave(data, key);
+        });
+      }}
+    >
+      <fieldset disabled={submission.pending || submission.retry}>
+        <TextField
+          label="Название"
+          value={name}
+          required
+          error={submission.fieldErrors.name}
+          onChange={(event) => setName(event.target.value)}
         />
+        <TextField
+          label="Количество"
+          type="text"
+          inputMode="decimal"
+          placeholder="Необязательно, например 0.125"
+          value={quantity}
+          error={submission.fieldErrors.quantity}
+          onChange={(event) => setQuantity(event.target.value)}
+        />
+        <TextField
+          label="Единица измерения"
+          value={unit}
+          error={submission.fieldErrors.unit}
+          onChange={(event) => setUnit(event.target.value)}
+        />
+        {product && (
+          <Checkbox
+            label="Отметить как купленный"
+            checked={isMarked}
+            onChange={(event) => setIsMarked(event.target.checked)}
+          />
+        )}
+      </fieldset>
+      {submission.error && <p role="alert">{submission.error}</p>}
+      {submission.retry && (
+        <p>Повторите отправку того же действия. Данные сохранены.</p>
       )}
-
-      <Button type="submit">Сохранить</Button>
+      <Button type="submit" disabled={submission.pending}>
+        {submission.pending
+          ? 'Сохранение…'
+          : submission.retry
+            ? 'Повторить'
+            : 'Сохранить'}
+      </Button>
     </form>
   );
 };

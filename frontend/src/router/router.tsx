@@ -1,27 +1,28 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 
-import Layout from "../layout/Layout";
+import Layout from '../layout/Layout';
 
-import RequireAuth from "./RequireAuth";
+import RequireAuth from './RequireAuth';
 
-import ShoppingListPage from "../pages/ShoppingListPage/ShoppingListPage";
-import ProfilePage from "../pages/ProfilePage/ProfilePage";
+import ShoppingListPage from '../pages/ShoppingListPage/ShoppingListPage';
+import ShoppingListsPage from '../pages/ShoppingListsPage/ShoppingListsPage';
+import ProfilePage from '../pages/ProfilePage/ProfilePage';
 
-import LoginPage from "../pages/LoginPage/LoginPage";
-import RegistrationPage from "../pages/RegistrationPage/RegistrationPage";
-import ActivationPage from "../pages/ActivationPage/ActivationPage";
+import LoginPage from '../pages/LoginPage/LoginPage';
+import RegistrationPage from '../pages/RegistrationPage/RegistrationPage';
+import ActivationPage from '../pages/ActivationPage/ActivationPage';
 
 export const router = createBrowserRouter([
   {
-    path: "/login",
+    path: '/login',
     element: <LoginPage />,
   },
   {
-    path: "/registration",
+    path: '/registration',
     element: <RegistrationPage />,
   },
   {
-    path: "/activation/:token",
+    path: '/activation/:token',
     element: <ActivationPage />,
   },
   {
@@ -31,11 +32,19 @@ export const router = createBrowserRouter([
         element: <Layout />,
         children: [
           {
-            path: "/",
+            path: '/',
+            element: <Navigate to="/lists" replace />,
+          },
+          {
+            path: '/lists',
+            element: <ShoppingListsPage />,
+          },
+          {
+            path: '/lists/:listId',
             element: <ShoppingListPage />,
           },
           {
-            path: "/profile",
+            path: '/profile',
             element: <ProfilePage />,
           },
         ],

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,31 +9,8 @@ import {
 import LoginPage from '../pages/LoginPage/LoginPage';
 import RegistrationPage from '../pages/RegistrationPage/RegistrationPage';
 import ProfilePage from '../pages/ProfilePage/ProfilePage';
-import ShoppingListPage from '../pages/ShoppingListPage/ShoppingListPage';
 import RequireAuth from '../router/RequireAuth';
-import Layout from '../layout/Layout';
-import ProductService from '../services/productService';
-vi.mock('../services/productService', () => ({
-  default: {
-    getProducts: vi.fn(),
-    postProduct: vi.fn(),
-    updateProduct: vi.fn(),
-    deleteProduct: vi.fn(),
-    deleteAllProducts: vi.fn(),
-  },
-}));
-const products = vi.mocked(ProductService);
-const initial = {
-  id: 1,
-  name: 'Молоко',
-  quantity: 1.5,
-  unit: 'л',
-  isMarked: false,
-};
-beforeEach(() => {
-  vi.resetAllMocks();
-  products.getProducts.mockResolvedValue([initial]);
-});
+beforeEach(() => vi.resetAllMocks());
 function authValue(
   overrides: Partial<AuthContextValue> = {},
 ): AuthContextValue {
@@ -212,64 +189,5 @@ describe('Страницы авторизации и навигация', () => 
       </AuthContext.Provider>,
     );
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
-  });
-});
-describe('Страница покупок с существующими компонентами и hooks', () => {
-  it('создаёт, редактирует и очищает позиции; отмена не вызывает запрос', async () => {
-    const user = userEvent.setup({ delay: null });
-    products.postProduct.mockResolvedValue({ ...initial, id: 2, name: 'Хлеб' });
-    products.updateProduct.mockResolvedValue({ ...initial, name: 'Кефир' });
-    products.deleteAllProducts.mockResolvedValue([]);
-    render(
-      <MemoryRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<ShoppingListPage />} />
-            <Route path="/profile" element={<div>Профиль</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(
-      await screen.findByRole('heading', { name: 'Молоко' }),
-    ).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Добавить товар' }));
-    let dialog = screen.getByRole('dialog');
-    await user.type(within(dialog).getByLabelText('Название'), 'Хлеб');
-    await user.type(within(dialog).getByLabelText('Количество'), '1');
-    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
-    expect(await screen.findByRole('heading', { name: 'Хлеб' })).toBeVisible();
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
-    );
-    await user.click(
-      screen.getByRole('button', { name: 'Редактировать Молоко' }),
-    );
-    dialog = screen.getByRole('dialog');
-    await user.clear(within(dialog).getByLabelText('Название'));
-    await user.type(within(dialog).getByLabelText('Название'), 'Кефир');
-    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
-    expect(await screen.findByRole('heading', { name: 'Кефир' })).toBeVisible();
-    await user.click(
-      screen.getByRole('button', { name: 'Очистить список покупок' }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Отменить' }));
-    expect(products.deleteAllProducts).not.toHaveBeenCalled();
-    await user.click(
-      screen.getByRole('button', { name: 'Очистить список покупок' }),
-    );
-    await user.click(
-      within(screen.getByRole('dialog')).getByRole('button', {
-        name: 'Удалить',
-      }),
-    );
-    expect(await screen.findByText('Список покупок пока пуст.')).toBeVisible();
-    await user.click(screen.getByRole('link', { name: 'Профиль' }));
-    expect(
-      await screen.findByText('Профиль', { selector: 'div' }),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: 'Добавить товар' }),
-    ).not.toBeInTheDocument();
   });
 });

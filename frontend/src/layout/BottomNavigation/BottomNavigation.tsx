@@ -1,14 +1,13 @@
-import { NavLink } from "react-router-dom";
-import ProfileIcon from "../../components/UI/svg/ProfileIcon/ProfileIcon";
-import ListIcon from "../../components/UI/svg/ListIcon/ListIcon";
-import cls from "./BottomNavigation.module.css";
+import { NavLink } from 'react-router-dom';
+import ProfileIcon from '../../components/UI/svg/ProfileIcon/ProfileIcon';
+import ListIcon from '../../components/UI/svg/ListIcon/ListIcon';
+import cls from './BottomNavigation.module.css';
 
 const BottomNavigation = () => {
   return (
     <nav className={cls.navigation}>
       <NavLink
-        to="/"
-        end
+        to="/lists"
         className={({ isActive }) =>
           isActive ? `${cls.link} ${cls.active}` : cls.link
         }

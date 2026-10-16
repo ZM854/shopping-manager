@@ -8,6 +8,8 @@ interface AlertDialogProps {
   discardText?: string;
   confirmText?: string;
   isDanger?: boolean;
+  pending?: boolean;
+  error?: string | null;
 }
 
 const AlertDialog = ({
@@ -18,17 +20,24 @@ const AlertDialog = ({
   discardText = 'Отменить',
   confirmText = 'Продолжить',
   isDanger = false,
+  pending = false,
+  error,
 }: AlertDialogProps) => {
   return (
     <div className={cls.alertDialog}>
       <h2 className={cls.title}>{title}</h2>
       {message && <p className={cls.message}>{message}</p>}
+      {error && <p role="alert">{error}</p>}
       <div className={cls.buttons}>
-        <Button variant="outlined" onClick={onDiscard}>
+        <Button variant="outlined" onClick={onDiscard} disabled={pending}>
           {discardText}
         </Button>
-        <Button tone={isDanger ? 'danger' : 'default'} onClick={onConfirm}>
-          {confirmText}
+        <Button
+          tone={isDanger ? 'danger' : 'default'}
+          onClick={onConfirm}
+          disabled={pending}
+        >
+          {pending ? 'Выполнение…' : confirmText}
         </Button>
       </div>
     </div>

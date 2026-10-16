@@ -5,22 +5,20 @@ import App from './App';
 import { router } from './router/router';
 vi.mock('./services/authService', () => ({
   authService: {
-    refresh: vi
-      .fn()
-      .mockResolvedValue({
-        user: {
-          id: 1,
-          name: 'Имя',
-          email: 'user@example.test',
-          isEmailVerified: true,
-        },
-        accessToken: 'test-access',
-      }),
+    refresh: vi.fn().mockResolvedValue({
+      user: {
+        id: 1,
+        name: 'Имя',
+        email: 'user@example.test',
+        isEmailVerified: true,
+      },
+      accessToken: 'test-access',
+    }),
     logout: vi.fn().mockResolvedValue(undefined),
   },
 }));
-vi.mock('./services/productService', () => ({
-  default: { getProducts: vi.fn().mockResolvedValue([]) },
+vi.mock('./services/shoppingService', () => ({
+  shoppingService: { getLists: vi.fn().mockResolvedValue([]) },
 }));
 vi.mock('./shared/logger', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), error: vi.fn() },
@@ -29,7 +27,10 @@ it('App использует настоящие маршруты, провайд
   const user = userEvent.setup({ delay: null });
   const { unmount } = render(<App />);
   try {
-    expect(await screen.findByText('Список покупок пока пуст.')).toBeVisible();
+    expect(
+      await screen.findByText('У вас пока нет списков покупок.'),
+    ).toBeVisible();
+    expect(router.state.location.pathname).toBe('/lists');
     await user.click(screen.getByRole('link', { name: 'Профиль' }));
     expect(await screen.findByRole('heading', { name: 'Имя' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Выйти из аккаунта' }));

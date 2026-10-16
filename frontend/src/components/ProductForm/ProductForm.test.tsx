@@ -15,34 +15,39 @@ describe('ProductForm текущего API', () => {
     await user.type(screen.getByLabelText('Количество'), '1.5');
     await user.type(screen.getByLabelText('Единица измерения'), 'л');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
-    expect(save).toHaveBeenCalledWith({
-      name: 'Молоко',
-      quantity: 1.5,
-      unit: 'л',
-      isMarked: false,
-    });
+    expect(save).toHaveBeenCalledWith(
+      {
+        name: 'Молоко',
+        quantity: '1.5',
+        unit: 'л',
+        isMarked: false,
+      },
+      expect.any(String),
+    );
   });
   it('заполняет форму редактирования и передаёт снятие отметки', async () => {
     const save = vi.fn();
     const user = userEvent.setup({ delay: null });
     const product = {
-      id: 1,
+      id: '1',
+      listId: '2',
       name: 'Молоко',
-      quantity: 1.5,
+      quantity: '1.5',
       unit: 'л',
       isMarked: true,
     };
     render(<ProductForm product={product} onSave={save} />);
     expect(screen.getByLabelText('Название')).toHaveValue('Молоко');
-    expect(screen.getByLabelText('Количество')).toHaveValue(1.5);
+    expect(screen.getByLabelText('Количество')).toHaveValue('1.5');
     await user.click(screen.getByLabelText('Отметить как купленный'));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Молоко',
         isMarked: false,
-        quantity: 1.5,
+        quantity: '1.5',
       }),
+      expect.any(String),
     );
   });
 });
