@@ -3,17 +3,20 @@ import SwaggerParser from '@apidevtools/swagger-parser';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const contractPath = fileURLToPath(new URL('../../../backend/api/shopping-lists.openapi.yaml', import.meta.url));
+const contractPath = fileURLToPath(
+  new URL('../../../backend/api/openapi.yaml', import.meta.url),
+);
 
 describe('OpenAPI списков', () => {
-  it('имеет валидную структуру и разрешимые ссылки', async () => {
-    const document = await SwaggerParser.validate(contractPath);
+  it('имеет валидную структуру и не зависит от внешних файлов', async () => {
+    const parser = new SwaggerParser();
+    const document = await parser.validate(contractPath);
     expect(document.info.version).toBe('0.2.0');
+    expect(parser.$refs.paths()).toHaveLength(1);
   });
 
-  it('основной OpenAPI подключает все shopping-маршруты с авторизацией и удаляет products', async () => {
-    const apiPath = fileURLToPath(new URL('../../../backend/api/openapi.yaml', import.meta.url));
-    const document = await SwaggerParser.validate(apiPath);
+  it('описывает все shopping-маршруты с авторизацией без старых products', async () => {
+    const document = await SwaggerParser.validate(contractPath);
     expect(document.paths?.['/products']).toBeUndefined();
     expect(document.paths?.['/products/{id}']).toBeUndefined();
     let operations = 0;
@@ -30,6 +33,24 @@ describe('OpenAPI списков', () => {
     expect(operations).toBe(12);
   });
 
+  it('сохраняет доступ к публичным маршрутам и авторизацию по refresh cookie', async () => {
+    const document = await SwaggerParser.validate(contractPath);
+    expect(document.security).toBeUndefined();
+    for (const path of [
+      '/healthz',
+      '/registration',
+      '/login',
+      '/activate/{link}',
+    ]) {
+      expect(document.paths?.[path]).toBeDefined();
+    }
+    for (const path of ['/refresh', '/logout']) {
+      expect(document.paths?.[path]?.post?.security).toEqual([
+        { refreshCookie: [] },
+      ]);
+    }
+  });
+
   it('фиксирует границы decimal-строки', async () => {
     const document = await SwaggerParser.dereference(contractPath);
     if (!('components' in document)) {
@@ -43,9 +64,21 @@ describe('OpenAPI списков', () => {
     for (const value of ['0.001', '0.125', '1', '1.000', '999999999.999']) {
       expect(pattern.test(value), value).toBe(true);
     }
-    for (const value of ['0', '0.000', '-1', 'NaN', 'Infinity', '1e3', '1,5', '01', '.5', '1.0001', '1000000000', ' 1 ']) {
+    for (const value of [
+      '0',
+      '0.000',
+      '-1',
+      'NaN',
+      'Infinity',
+      '1e3',
+      '1,5',
+      '01',
+      '.5',
+      '1.0001',
+      '1000000000',
+      ' 1 ',
+    ]) {
       expect(pattern.test(value), value).toBe(false);
     }
   });
-
 });
