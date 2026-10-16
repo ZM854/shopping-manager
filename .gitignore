@@ -51,3 +51,5 @@ frontend/.npm-cache/
 backend/.tools/
 backend/.cache/
 frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/

@@ -1,0 +1,87 @@
+# Полностью отдельное окружение: без рабочего .env, портов БД и persistent volumes.
+name: shopping-manager-e2e
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: shopping_manager_e2e
+      POSTGRES_USER: shopping_manager_e2e
+      POSTGRES_PASSWORD: local-e2e-only
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopping_manager_e2e -d shopping_manager_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: ./backend
+      target: migrations
+    command: ["-path", "/migrations", "-database", "postgres://shopping_manager_e2e:local-e2e-only@postgres:5432/shopping_manager_e2e?sslmode=disable", "up"]
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports:
+      - "127.0.0.1:58025:8025"
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    environment:
+      APP_ENV: dev
+      SERVER_PORT: ":8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: shopping_manager_e2e
+      DB_PASSWORD: local-e2e-only
+      DB_NAME: shopping_manager_e2e
+      DB_SSLMODE: disable
+      JWT_ACCESS_SECRET: ${E2E_JWT_ACCESS_SECRET:?Run node scripts/e2e-env.mjs}
+      JWT_REFRESH_SECRET: ${E2E_JWT_REFRESH_SECRET:?Run node scripts/e2e-env.mjs}
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 24h
+      PUBLIC_API_URL: http://127.0.0.1:55173/api
+      FRONTEND_URL: http://127.0.0.1:55173
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_AUTH_ENABLED: "false"
+      SMTP_TLS_REQUIRED: "false"
+      SMTP_FROM: shopping-manager@example.test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    init: true
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    ports:
+      - "127.0.0.1:55173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    init: true

@@ -4,7 +4,7 @@ DEV_COMPOSE = $(COMPOSE) -f compose.dev.yaml
 MODE ?= dev
 ACTIVE_COMPOSE = $(if $(filter built,$(MODE)),$(COMPOSE),$(DEV_COMPOSE))
 
-.PHONY: init dev up down logs status restart migrate-up migrate-version frontend-check backend-check frontend-test frontend-coverage backend-test backend-coverage backend-integration test-db-up
+.PHONY: init dev up down logs status restart migrate-up migrate-version frontend-check backend-check frontend-test frontend-coverage backend-test backend-coverage backend-integration integration-coverage test-db-up e2e-env e2e-up e2e e2e-stop
 
 init:
 	@if [ -f .env ]; then echo 'Root .env already exists; kept unchanged.'; \
@@ -64,3 +64,19 @@ backend-integration:
 
 test-db-up:
 	docker compose -f compose.test.yaml up -d --wait --wait-timeout 90 postgres-test
+
+integration-coverage:
+	mkdir -p backend/.cache
+	docker compose -f compose.test.yaml run --build --rm -v "$(CURDIR)/backend/.cache:/coverage" backend-test go test -count=1 -tags=integration '-coverpkg=./internal/...' -coverprofile=/coverage/integration-coverage.out ./...
+
+e2e-env:
+	node scripts/e2e-env.mjs
+
+e2e-up: e2e-env
+	docker compose --env-file .env.e2e.local -f compose.e2e.yaml up --build -d --wait --wait-timeout 300
+
+e2e: e2e-up
+	npm --prefix frontend run test:e2e
+
+e2e-stop: e2e-env
+	docker compose --env-file .env.e2e.local -f compose.e2e.yaml stop

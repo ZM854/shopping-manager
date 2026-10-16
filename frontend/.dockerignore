@@ -7,3 +7,6 @@ dist-ssr
 !.env.example
 *.log
 AGENTS.md
+coverage
+playwright-report
+test-results

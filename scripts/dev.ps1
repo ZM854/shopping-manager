@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'dev', 'up', 'down', 'logs', 'status', 'restart', 'migrate-up', 'migrate-version', 'frontend-check', 'backend-check')]
+    [ValidateSet('init', 'dev', 'up', 'down', 'logs', 'status', 'restart', 'migrate-up', 'migrate-version', 'frontend-check', 'backend-check', 'frontend-test', 'frontend-coverage', 'backend-test', 'backend-coverage', 'backend-integration', 'integration-coverage', 'e2e', 'e2e-up', 'e2e-stop')]
     [string]$Action = 'dev',
     [ValidateSet('dev', 'built')]
     [string]$Mode = 'dev',
@@ -11,6 +11,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+
+$testActions = @{
+    'frontend-test' = 'frontend'
+    'frontend-coverage' = 'frontend-coverage'
+    'backend-test' = 'backend'
+    'backend-coverage' = 'backend-coverage'
+    'backend-integration' = 'integration'
+    'integration-coverage' = 'integration-coverage'
+    'e2e' = 'e2e'
+    'e2e-up' = 'e2e-up'
+    'e2e-stop' = 'e2e-stop'
+}
+if ($testActions.ContainsKey($Action)) {
+    & (Join-Path $PSScriptRoot 'test.ps1') $testActions[$Action]
+    exit $LASTEXITCODE
+}
 
 if ($Action -eq 'init') {
     $envPath = Join-Path $projectRoot '.env'
