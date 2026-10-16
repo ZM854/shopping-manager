@@ -15,20 +15,21 @@ var ErrUserNotFound = errors.New("User not found")
 var ErrUserAlreadyExist = errors.New("User already exist")
 
 type UserRepository struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
 	log *slog.Logger
 }
 
-func NewUserRepository(db *pgxpool.Pool, log *slog.Logger) *UserRepository  {
+func NewUserRepository(db *pgxpool.Pool, log *slog.Logger) *UserRepository {
 	return &UserRepository{
-		db: db,
+		db:  db,
 		log: log.With("component", "repository", "entity", "user"),
 	}
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (User, error) {
 	const query = `
-		SELECT id, name, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified,
+			COALESCE(activation_token, '')
 		FROM users
 		WHERE email = $1
 	`
@@ -71,7 +72,8 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (User, er
 
 func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 	const query = `
-		SELECT id, name, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified,
+			COALESCE(activation_token, '')
 		FROM users
 		WHERE id = $1
 	`
@@ -113,9 +115,10 @@ func (r *UserRepository) GetById(ctx context.Context, id int64) (User, error) {
 
 func (r *UserRepository) GetByActivationToken(ctx context.Context, token string) (User, error) {
 	const query = `
-		SELECT id, name, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified,
+			COALESCE(activation_token, '')
 		FROM users
-		WHERE activation_token = $1
+		WHERE activation_token = $1 AND activation_token <> ''
 	`
 
 	start := time.Now()
@@ -154,7 +157,8 @@ func (r *UserRepository) GetByActivationToken(ctx context.Context, token string)
 
 func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
 	const query = `
-		SELECT id, name, email, password_hash, is_email_verified, activation_token
+		SELECT id, name, email, password_hash, is_email_verified,
+			COALESCE(activation_token, '')
 		FROM users
 		ORDER BY id
 	`
@@ -173,7 +177,7 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
 	for rows.Next() {
 		var user User
 
-		err:= rows.Scan(
+		err := rows.Scan(
 			&user.ID,
 			&user.Name,
 			&user.Email,
@@ -199,7 +203,7 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest) (User, error)  {
+func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest) (User, error) {
 	const query = `
 		INSERT INTO users (
 			name,
@@ -214,9 +218,9 @@ func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest)
 	start := time.Now()
 
 	newUser := User{
-		Name: userData.Name,
-		Email: userData.Email,
-		PasswordHash: userData.PasswordHash,
+		Name:            userData.Name,
+		Email:           userData.Email,
+		PasswordHash:    userData.PasswordHash,
 		IsEmailVerified: false,
 		ActivationToken: userData.ActivationToken,
 	}
@@ -224,32 +228,32 @@ func (r *UserRepository) Create(ctx context.Context, userData CreateUserRequest)
 	err := r.db.QueryRow(
 		ctx, query,
 		userData.Name,
-		userData.Email, 
-		userData.PasswordHash, 
+		userData.Email,
+		userData.PasswordHash,
 		userData.ActivationToken,
 	).Scan(&newUser.ID)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code =="23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return User{}, ErrUserAlreadyExist
 		}
 
 		r.log.Error(
-			"failed to create user", 
-			"user_email", userData.Email, 
+			"failed to create user",
+			"user_email", userData.Email,
 			"error", err,
 		)
 		return User{}, err
 	}
 
 	r.log.Debug(
-		"user created", 
+		"user created",
 		"user_id", newUser.ID,
 		"duration", time.Since(start),
 	)
 
-	return newUser, nil	
+	return newUser, nil
 }
 
 func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserRequest) (User, error) {
@@ -260,9 +264,10 @@ func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserReq
 			email = $3,
 			password_hash = $4,
 			is_email_verified = $5,
-			activation_token = $6
+			activation_token = NULLIF($6, '')
 		WHERE id = $1
-		RETURNING id, name, email, password_hash, is_email_verified, activation_token
+		RETURNING id, name, email, password_hash, is_email_verified,
+			COALESCE(activation_token, '')
 	`
 
 	start := time.Now()
@@ -270,9 +275,9 @@ func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserReq
 	var user User
 
 	err := r.db.QueryRow(
-		ctx, 
-		query, 
-		id, 
+		ctx,
+		query,
+		id,
 		req.Name,
 		req.Email,
 		req.PasswordHash,
@@ -300,4 +305,3 @@ func (r *UserRepository) Update(ctx context.Context, id int64, req UpdateUserReq
 
 	return user, nil
 }
-
