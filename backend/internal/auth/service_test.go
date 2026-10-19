@@ -16,13 +16,23 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const testActivationToken = "12345678-1234-4123-8123-123456789abc"
+
+func newTestUserService(log *slog.Logger, users userStore, tokens userTokens, mail activationMailer, url string) *UserService {
+	return NewUserService(log, users, tokens, mail, url, DefaultActivationOptions())
+}
+
 func testLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 type usersFake struct {
 	user           User
 	err, updateErr error
 	created        CreateUserRequest
-	updated        UpdateUserRequest
+	rotated        ActivationState
+	activatedHash  string
+	nextSend       time.Time
+	inTx           bool
+	txErr          error
 	ctx            context.Context
 	id             int64
 }
@@ -33,7 +43,7 @@ func (f *usersFake) Create(ctx context.Context, r CreateUserRequest) (User, erro
 	if f.err != nil {
 		return User{}, f.err
 	}
-	f.user = User{ID: 42, Name: r.Name, Email: r.Email, PasswordHash: r.PasswordHash, ActivationToken: r.ActivationToken}
+	f.user = User{ID: 42, Name: r.Name, Email: r.Email, PasswordHash: r.PasswordHash}
 	return f.user, nil
 }
 func (f *usersFake) GetByEmail(ctx context.Context, _ string) (User, error) {
@@ -45,15 +55,25 @@ func (f *usersFake) GetById(ctx context.Context, id int64) (User, error) {
 	f.id = id
 	return f.user, f.err
 }
-func (f *usersFake) GetByActivationToken(ctx context.Context, _ string) (User, error) {
-	f.ctx = ctx
-	return f.user, f.err
+func (f *usersFake) Activate(ctx context.Context, hash string) error {
+	f.ctx, f.activatedHash = ctx, hash
+	return f.updateErr
 }
-func (f *usersFake) Update(ctx context.Context, id int64, r UpdateUserRequest) (User, error) {
+func (f *usersFake) InActivationTx(ctx context.Context, fn func(activationTransaction) error) error {
+	if f.txErr != nil {
+		return f.txErr
+	}
+	f.inTx = true
+	defer func() { f.inTx = false }()
+	return fn(f)
+}
+func (f *usersFake) LockActivation(ctx context.Context, _ string) (ActivationAccount, error) {
 	f.ctx = ctx
-	f.id = id
-	f.updated = r
-	return f.user, f.updateErr
+	return ActivationAccount{ID: 42, IsEmailVerified: f.user.IsEmailVerified, NextSendAt: f.nextSend}, f.err
+}
+func (f *usersFake) SaveActivation(ctx context.Context, id int64, state ActivationState) error {
+	f.ctx, f.id, f.rotated = ctx, id, state
+	return f.updateErr
 }
 
 type tokensFake struct {
@@ -96,17 +116,24 @@ func (f *tokensFake) RemoveToken(ctx context.Context, id int64) error {
 type mailFake struct {
 	to, link string
 	calls    int
+	err      error
+	deadline bool
+	repo     *usersFake
 }
 
-func (f *mailFake) SendActivationMail(_ context.Context, to, link string) error {
+func (f *mailFake) SendActivationMail(ctx context.Context, to, link string) error {
 	f.to, f.link = to, link
 	f.calls++
-	return nil
+	_, f.deadline = ctx.Deadline()
+	if f.repo != nil && f.repo.inTx {
+		return errors.New("SMTP called during transaction")
+	}
+	return f.err
 }
 
 func TestRegistrationHashesPasswordAndSendsActivation(t *testing.T) {
 	repo, tokens, mail := &usersFake{}, &tokensFake{}, &mailFake{}
-	s := NewUserService(testLog(), repo, tokens, mail, "https://example.test/api/activate")
+	s := newTestUserService(testLog(), repo, tokens, mail, "https://example.test/api/activate")
 	ctx := context.Background()
 	resp, err := s.Registration(ctx, "Имя", "user@example.test", "password123")
 	if err != nil {
@@ -115,20 +142,23 @@ func TestRegistrationHashesPasswordAndSendsActivation(t *testing.T) {
 	if bcrypt.CompareHashAndPassword([]byte(repo.created.PasswordHash), []byte("password123")) != nil || repo.created.PasswordHash == "password123" {
 		t.Fatal("Password must be hashed")
 	}
-	if repo.created.ActivationToken == "" || mail.to != "user@example.test" || mail.link != "https://example.test/api/activate/"+repo.created.ActivationToken || mail.calls != 1 {
+	if repo.created.Activation.TokenHash == "" || mail.to != "user@example.test" ||
+		activationHash(mail.link[strings.LastIndex(mail.link, "/")+1:]) != repo.created.Activation.TokenHash ||
+		mail.calls != 1 || !mail.deadline ||
+		repo.created.Activation.ExpiresAt.Sub(repo.created.Activation.NextSendAt) != 24*time.Hour-time.Minute {
 		t.Fatal("Incorrect activation email")
 	}
 	if !resp.ActivationRequired || repo.ctx != ctx || tokens.generated != 0 || tokens.saved != 0 {
 		t.Fatal("Registration data or context lost")
 	}
 	data, _ := json.Marshal(resp)
-	if strings.Contains(string(data), repo.created.PasswordHash) || strings.Contains(string(data), repo.created.ActivationToken) {
+	if strings.Contains(string(data), repo.created.PasswordHash) || strings.Contains(string(data), repo.created.Activation.TokenHash) {
 		t.Fatal("Private user fields leaked into DTO")
 	}
 }
 func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 	problem := errors.New("dependency failed")
-	for _, stage := range []string{"hash", "duplicate", "repository"} {
+	for _, stage := range []string{"hash", "duplicate", "repository", "mail"} {
 		t.Run(stage, func(t *testing.T) {
 			r, ts, m := &usersFake{}, &tokensFake{}, &mailFake{}
 			password := "password123"
@@ -142,8 +172,11 @@ func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 				want = ErrUserAlreadyExist
 			case "repository":
 				r.err = problem
+			case "mail":
+				m.err = problem
+				want = ErrActivationDelivery
 			}
-			_, err := NewUserService(testLog(), r, ts, m, "http://example.test/activate").Registration(context.Background(), "Имя", "user@example.test", password)
+			_, err := newTestUserService(testLog(), r, ts, m, "http://example.test/activate").Registration(context.Background(), "Имя", "user@example.test", password)
 			if !errors.Is(err, want) {
 				t.Fatalf("error=%v, want %v", err, want)
 			}
@@ -184,7 +217,7 @@ func TestLoginCredentialsActivationAndDependencyFailures(t *testing.T) {
 				ts.saveErr = problem
 				want = problem
 			}
-			resp, err := NewUserService(testLog(), r, ts, &mailFake{}, "").Login(context.Background(), "user@example.test", password)
+			resp, err := newTestUserService(testLog(), r, ts, &mailFake{}, "").Login(context.Background(), "user@example.test", password)
 			if !errors.Is(err, want) {
 				t.Fatalf("error=%v want %v", err, want)
 			}
@@ -199,33 +232,76 @@ func TestLoginCredentialsActivationAndDependencyFailures(t *testing.T) {
 		})
 	}
 }
-func TestActivationPreservesUserFields(t *testing.T) {
-	problem := errors.New("write failed")
-	for _, stage := range []string{"success", "invalid", "lookup", "update"} {
-		t.Run(stage, func(t *testing.T) {
-			r := &usersFake{user: User{ID: 42, Name: "Имя", Email: "user@example.test", PasswordHash: "test-hash"}}
+func TestActivationHashesTokenAndRejectsMalformed(t *testing.T) {
+	repo := &usersFake{}
+	service := newTestUserService(testLog(), repo, nil, nil, "")
+	ctx := context.Background()
+	for _, token := range []string{"", "bad", "12345678-1234-1123-8123-123456789abc"} {
+		if err := service.Activate(ctx, token); !errors.Is(err, ErrInvalidActivation) || repo.activatedHash != "" {
+			t.Fatal("Malformed token reached the repository")
+		}
+	}
+	if err := service.Activate(ctx, testActivationToken); err != nil ||
+		repo.activatedHash != activationHash(testActivationToken) || repo.ctx != ctx {
+		t.Fatal("Activation must use only the token hash and request context")
+	}
+	for _, err := range []error{ErrInvalidActivation, errors.New("database failed")} {
+		repo.updateErr = err
+		if got := service.Activate(ctx, testActivationToken); !errors.Is(got, err) {
+			t.Fatal("Activation lost error")
+		}
+	}
+}
+
+func TestResendActivationAndFailures(t *testing.T) {
+	now := time.Now()
+	problem := errors.New("dependency failed")
+	for _, scenario := range []string{"success", "unknown", "verified", "cooldown", "lookup", "save", "transaction", "mail"} {
+		t.Run(scenario, func(t *testing.T) {
+			repo := &usersFake{}
+			mail := &mailFake{repo: repo}
+			service := newTestUserService(testLog(), repo, nil, mail, "https://example.test/activation")
+			service.now = func() time.Time { return now }
 			var want error
-			switch stage {
-			case "invalid":
-				r.err = ErrUserNotFound
-				want = ErrInvalidActivation
+			switch scenario {
+			case "unknown":
+				repo.err = ErrUserNotFound
+			case "verified":
+				repo.user.IsEmailVerified = true
+			case "cooldown":
+				repo.nextSend = now.Add(30 * time.Second)
 			case "lookup":
-				r.err = problem
-				want = problem
-			case "update":
-				r.updateErr = problem
-				want = problem
+				repo.err, want = problem, problem
+			case "save":
+				repo.updateErr, want = problem, problem
+			case "transaction":
+				repo.txErr, want = problem, problem
+			case "mail":
+				mail.err, want = problem, ErrActivationDelivery
 			}
-			err := NewUserService(testLog(), r, &tokensFake{}, &mailFake{}, "").Activate(context.Background(), "activation")
-			if !errors.Is(err, want) {
-				t.Fatalf("error=%v want %v", err, want)
+			err := service.ResendActivation(context.Background(), "user@example.test")
+			if scenario == "cooldown" {
+				var cooldown *ActivationCooldownError
+				if !errors.As(err, &cooldown) || cooldown.RetryAfter != 30 {
+					t.Fatal("Cooldown lost")
+				}
+			} else if !errors.Is(err, want) {
+				t.Fatalf("error=%v want=%v", err, want)
 			}
-			if stage == "success" && (r.id != 42 || !r.updated.IsEmailVerified || r.updated.Name != r.user.Name || r.updated.Email != r.user.Email || r.updated.PasswordHash != r.user.PasswordHash) {
-				t.Fatal("Activation changed unrelated user fields")
+			if scenario == "success" || scenario == "mail" {
+				if mail.calls != 1 || !mail.deadline ||
+					repo.rotated.TokenHash != activationHash(mail.link[strings.LastIndex(mail.link, "/")+1:]) ||
+					!repo.rotated.ExpiresAt.Equal(now.Add(24*time.Hour)) ||
+					!repo.rotated.NextSendAt.Equal(now.Add(time.Minute)) {
+					t.Fatal("Resend must persist hashed expiring token before bounded SMTP")
+				}
+			} else if mail.calls != 0 {
+				t.Fatal("Failed or neutral request sent email")
 			}
 		})
 	}
 }
+
 func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 	problem := errors.New("dependency failed")
 	for _, stage := range []string{"success", "validate", "find", "user", "inactive", "revoke", "already_revoked", "generate", "save"} {
@@ -260,7 +336,7 @@ func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 				ts.saveErr = problem
 				want = problem
 			}
-			resp, err := NewUserService(testLog(), r, ts, &mailFake{}, "").Refresh(context.Background(), "old-refresh")
+			resp, err := newTestUserService(testLog(), r, ts, &mailFake{}, "").Refresh(context.Background(), "old-refresh")
 			if !errors.Is(err, want) {
 				t.Fatalf("error=%v want %v", err, want)
 			}
@@ -290,7 +366,7 @@ func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 			ts.removeErr = problem
 			want = problem
 		}
-		err := NewUserService(testLog(), &usersFake{}, ts, &mailFake{}, "").Logout(context.Background(), "refresh")
+		err := newTestUserService(testLog(), &usersFake{}, ts, &mailFake{}, "").Logout(context.Background(), "refresh")
 		if !errors.Is(err, want) {
 			t.Fatal("Logout lost error")
 		}

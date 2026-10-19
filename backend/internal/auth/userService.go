@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -13,15 +15,25 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrUserNotActivated   = errors.New("user is not activated")
-	ErrInvalidActivation  = errors.New("invalid activation token")
+	ErrInvalidActivation  = errors.New("invalid or expired activation token")
+	ErrActivationDelivery = errors.New("activation email delivery failed")
 )
+
+type ActivationCooldownError struct{ RetryAfter int }
+
+func (e *ActivationCooldownError) Error() string { return "activation resend cooldown" }
+
+type activationTransaction interface {
+	LockActivation(context.Context, string) (ActivationAccount, error)
+	SaveActivation(context.Context, int64, ActivationState) error
+}
 
 type userStore interface {
 	Create(context.Context, CreateUserRequest) (User, error)
 	GetByEmail(context.Context, string) (User, error)
 	GetById(context.Context, int64) (User, error)
-	GetByActivationToken(context.Context, string) (User, error)
-	Update(context.Context, int64, UpdateUserRequest) (User, error)
+	Activate(context.Context, string) error
+	InActivationTx(context.Context, func(activationTransaction) error) error
 }
 
 type userTokens interface {
@@ -41,7 +53,9 @@ type UserService struct {
 	userRepository    userStore
 	tokenService      userTokens
 	mailService       activationMailer
-	activationBaseUrl string
+	activationBaseURL string
+	activationOptions ActivationOptions
+	now               func() time.Time
 }
 
 func NewUserService(
@@ -49,15 +63,42 @@ func NewUserService(
 	userRepository userStore,
 	tokenService userTokens,
 	mailService activationMailer,
-	activationBaseUrl string,
+	activationBaseURL string,
+	options ActivationOptions,
 ) *UserService {
 	return &UserService{
 		log:               log.With("component", "service", "entity", "user"),
 		userRepository:    userRepository,
 		tokenService:      tokenService,
 		mailService:       mailService,
-		activationBaseUrl: activationBaseUrl,
+		activationBaseURL: activationBaseURL,
+		activationOptions: options,
+		now:               time.Now,
 	}
+}
+
+func activationHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *UserService) newActivation(now time.Time) (string, ActivationState) {
+	token := uuid.NewString()
+	return token, ActivationState{
+		TokenHash:  activationHash(token),
+		ExpiresAt:  now.Add(s.activationOptions.TTL),
+		NextSendAt: now.Add(s.activationOptions.ResendInterval),
+	}
+}
+
+func (s *UserService) sendActivation(ctx context.Context, email string, token string) error {
+	mailCtx, cancel := context.WithTimeout(ctx, s.activationOptions.MailTimeout)
+	defer cancel()
+	if err := s.mailService.SendActivationMail(mailCtx, email, s.activationBaseURL+"/"+token); err != nil {
+		s.log.Error("activation email delivery failed")
+		return ErrActivationDelivery
+	}
+	return nil
 }
 
 func (s *UserService) Registration(
@@ -66,67 +107,56 @@ func (s *UserService) Registration(
 	email string,
 	password string,
 ) (RegistrationResponse, error) {
-	passwordHash, err := bcrypt.GenerateFromPassword(
-		[]byte(password),
-		bcrypt.DefaultCost,
-	)
-
-	if err != nil {
-		s.log.Error("failed to hash password", "error", err)
-		return RegistrationResponse{}, err
-	}
-
-	activationToken := uuid.NewString()
-
-	_, err = s.userRepository.Create(
-		ctx,
-		CreateUserRequest{
-			Name:            name,
-			Email:           email,
-			PasswordHash:    string(passwordHash),
-			ActivationToken: activationToken,
-		},
-	)
-
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return RegistrationResponse{}, err
 	}
-
-	s.mailService.SendActivationMail(
-		ctx,
-		email,
-		fmt.Sprintf(
-			"%s/%s",
-			s.activationBaseUrl,
-			activationToken,
-		),
-	)
-
+	token, state := s.newActivation(s.now())
+	_, err = s.userRepository.Create(ctx, CreateUserRequest{
+		Name: name, Email: email, PasswordHash: string(passwordHash), Activation: state,
+	})
+	if err != nil {
+		return RegistrationResponse{}, err
+	}
+	if err := s.sendActivation(ctx, email, token); err != nil {
+		return RegistrationResponse{}, err
+	}
 	return RegistrationResponse{ActivationRequired: true}, nil
 }
 
-func (s *UserService) Activate(ctx context.Context, activationLink string) error {
-	user, err := s.userRepository.GetByActivationToken(ctx, activationLink)
+func (s *UserService) Activate(ctx context.Context, token string) error {
+	id, err := uuid.Parse(token)
+	if err != nil || id.Version() != 4 || id.String() != token {
+		return ErrInvalidActivation
+	}
+	return s.userRepository.Activate(ctx, activationHash(token))
+}
 
-	if err != nil {
+func (s *UserService) ResendActivation(ctx context.Context, email string) error {
+	var token string
+	err := s.userRepository.InActivationTx(ctx, func(tx activationTransaction) error {
+		account, err := tx.LockActivation(ctx, email)
 		if errors.Is(err, ErrUserNotFound) {
-			return ErrInvalidActivation
+			return nil
 		}
+		if err != nil {
+			return err
+		}
+		if account.IsEmailVerified {
+			return nil
+		}
+		now := s.now()
+		if remaining := account.NextSendAt.Sub(now); remaining > 0 {
+			return &ActivationCooldownError{RetryAfter: int((remaining + time.Second - 1) / time.Second)}
+		}
+		var state ActivationState
+		token, state = s.newActivation(now)
+		return tx.SaveActivation(ctx, account.ID, state)
+	})
+	if err != nil || token == "" {
 		return err
 	}
-	_, err = s.userRepository.Update(
-		ctx,
-		user.ID,
-		UpdateUserRequest{
-			Name:            user.Name,
-			Email:           user.Email,
-			PasswordHash:    user.PasswordHash,
-			IsEmailVerified: true,
-			ActivationToken: "",
-		},
-	)
-
-	return err
+	return s.sendActivation(ctx, email, token)
 }
 
 func (s *UserService) Login(ctx context.Context, email string, password string) (AuthResult, error) {

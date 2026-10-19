@@ -27,8 +27,11 @@ type Config struct {
 	JWTAccessSecret  string
 	JWTRefreshSecret string
 
-	JWTAccessTTL  time.Duration
-	JWTRefreshTTL time.Duration
+	JWTAccessTTL             time.Duration
+	JWTRefreshTTL            time.Duration
+	ActivationTTL            time.Duration
+	ActivationResendInterval time.Duration
+	ActivationMailTimeout    time.Duration
 
 	SMTPHost        string
 	SMTPPort        string
@@ -78,6 +81,18 @@ func Load() (Config, error) {
 	if accessSecret == refreshSecret {
 		return Config{}, fmt.Errorf("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ")
 	}
+	activationTTL, err := parseDuration("ACTIVATION_TTL", os.Getenv("ACTIVATION_TTL"), 24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	activationResend, err := parseDuration("ACTIVATION_RESEND_INTERVAL", os.Getenv("ACTIVATION_RESEND_INTERVAL"), time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	activationTimeout, err := parseDuration("ACTIVATION_MAIL_TIMEOUT", os.Getenv("ACTIVATION_MAIL_TIMEOUT"), 10*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
 	smtpAuth, err := parseBool("SMTP_AUTH_ENABLED", os.Getenv("SMTP_AUTH_ENABLED"), true)
 	if err != nil {
 		return Config{}, err
@@ -102,8 +117,11 @@ func Load() (Config, error) {
 		JWTAccessSecret:  accessSecret,
 		JWTRefreshSecret: refreshSecret,
 
-		JWTAccessTTL:  accessTTL,
-		JWTRefreshTTL: refreshTTL,
+		JWTAccessTTL:             accessTTL,
+		JWTRefreshTTL:            refreshTTL,
+		ActivationTTL:            activationTTL,
+		ActivationResendInterval: activationResend,
+		ActivationMailTimeout:    activationTimeout,
 
 		SMTPHost:        os.Getenv("SMTP_HOST"),
 		SMTPPort:        os.Getenv("SMTP_PORT"),

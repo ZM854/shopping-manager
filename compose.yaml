@@ -57,6 +57,9 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Run scripts/dev.ps1 init or make init first}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-720h}
+      ACTIVATION_TTL: ${ACTIVATION_TTL:-24h}
+      ACTIVATION_RESEND_INTERVAL: ${ACTIVATION_RESEND_INTERVAL:-60s}
+      ACTIVATION_MAIL_TIMEOUT: ${ACTIVATION_MAIL_TIMEOUT:-10s}
       PUBLIC_API_URL: http://localhost:${APP_PORT:-5173}/api
       FRONTEND_URL: http://localhost:${APP_PORT:-5173}
       SMTP_HOST: mailpit

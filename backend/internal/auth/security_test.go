@@ -79,9 +79,9 @@ func TestJWTRequiresAlgorithmPurposeExpiryAndUser(t *testing.T) {
 
 func TestInternalSecretsCannotBeSerialized(t *testing.T) {
 	for _, model := range []any{
-		User{ID: 42, PasswordHash: "private-password-hash", ActivationToken: "private-activation"},
-		CreateUserRequest{PasswordHash: "private-password-hash", ActivationToken: "private-activation"},
-		UpdateUserRequest{PasswordHash: "private-password-hash", ActivationToken: "private-activation"},
+		User{ID: 42, PasswordHash: "private-password-hash"},
+		CreateUserRequest{PasswordHash: "private-password-hash"},
+		ActivationState{TokenHash: "private-activation"},
 		RefreshToken{TokenHash: "private-refresh-hash"},
 		TokenPair{AccessToken: "private-access", RefreshToken: "private-refresh"},
 		AuthResult{Tokens: TokenPair{AccessToken: "private-access", RefreshToken: "private-refresh"}},

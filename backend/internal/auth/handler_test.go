@@ -52,6 +52,11 @@ func (f *authFake) Activate(ctx context.Context, token string) error {
 	f.calls++
 	return f.err
 }
+func (f *authFake) ResendActivation(ctx context.Context, email string) error {
+	f.ctx, f.email = ctx, email
+	f.calls++
+	return f.err
+}
 func TestAuthHTTPResponses(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ops := []struct {
@@ -66,14 +71,16 @@ func TestAuthHTTPResponses(t *testing.T) {
 		{"POST", "/login", func(h *AuthHandler) gin.HandlerFunc { return h.Login }, 200, false, ErrInvalidCredentials, 401},
 		{"POST", "/refresh", func(h *AuthHandler) gin.HandlerFunc { return h.Refresh }, 200, true, ErrInvalidToken, 401},
 		{"POST", "/logout", func(h *AuthHandler) gin.HandlerFunc { return h.Logout }, 200, true, nil, 500},
-		{"GET", "/activate/:link", func(h *AuthHandler) gin.HandlerFunc { return h.Activate }, 302, false, ErrInvalidActivation, 400},
+		{"POST", "/activation", func(h *AuthHandler) gin.HandlerFunc { return h.Activate }, 204, false, ErrInvalidActivation, 400},
+		{"POST", "/activation/resend", func(h *AuthHandler) gin.HandlerFunc { return h.ResendActivation }, 202, false, &ActivationCooldownError{RetryAfter: 30}, 429},
 	}
 	for _, op := range ops {
 		t.Run(op.path, func(t *testing.T) {
 			for _, scenario := range []string{"success", "failure", "business", "missing_cookie", "invalid_body", "inactive"} {
 				if scenario == "business" && op.business == nil ||
 					scenario == "missing_cookie" && !op.cookie ||
-					scenario == "invalid_body" && op.path != "/login" && op.path != "/registration" ||
+					scenario == "invalid_body" && op.path == "/logout" ||
+					scenario == "invalid_body" && op.path == "/refresh" ||
 					scenario == "inactive" && op.path != "/login" && op.path != "/refresh" {
 					continue
 				}
@@ -95,10 +102,13 @@ func TestAuthHTTPResponses(t *testing.T) {
 						f.err = ErrUserNotActivated
 						want = 403
 					}
-					h := NewAuthHandler(testLog(), f, "https://client.example.test/login")
+					h := NewAuthHandler(testLog(), f)
 					r := gin.New()
 					r.Handle(op.method, op.path, op.fn(h))
 					body := `{"name":"Имя","email":"user@example.test","password":"password123"}`
+					if op.path == "/activation" {
+						body = `{"token":"` + testActivationToken + `"}`
+					}
 					if scenario == "invalid_body" {
 						body = `{"email":"invalid","password":"x"}`
 					}
@@ -156,9 +166,9 @@ func TestAuthHTTPResponses(t *testing.T) {
 							if len(cookies) != 1 || cookies[0].MaxAge >= 0 {
 								t.Fatal("Logout must clear cookie")
 							}
-						case "/activate/:link":
-							if w.Header().Get("Location") != "https://client.example.test/login" || f.token != "activation" {
-								t.Fatal("Wrong activation redirect")
+						case "/activation":
+							if w.Body.Len() != 0 || f.token != testActivationToken {
+								t.Fatal("Activation must return 204")
 							}
 						}
 					}
@@ -172,16 +182,53 @@ func TestAuthHTTPResponses(t *testing.T) {
 }
 
 func TestActivationErrorDoesNotLogToken(t *testing.T) {
-	const token = "private-test-activation-token"
+	const token = testActivationToken
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
-	h := NewAuthHandler(log, &authFake{err: fmt.Errorf("dependency failed for %s", token)}, "")
+	h := NewAuthHandler(log, &authFake{err: fmt.Errorf("dependency failed for %s", token)})
 	r := gin.New()
-	r.GET("/activate/:link", h.Activate)
+	r.POST("/activation", h.Activate)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("GET", "/activate/"+token, nil))
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/activation", strings.NewReader(`{"token":"`+token+`"}`)))
 	if w.Code != 500 || strings.Contains(logs.String(), token) ||
 		strings.Contains(w.Body.String(), token) || logs.Len() == 0 {
 		t.Fatal("Activation failure must be logged without its token")
+	}
+}
+
+func TestActivationDeliveryAndPayloadFailures(t *testing.T) {
+	for _, path := range []string{"/registration", "/activation/resend"} {
+		t.Run(path, func(t *testing.T) {
+			fake := &authFake{err: ErrActivationDelivery}
+			handler := NewAuthHandler(testLog(), fake)
+			router := gin.New()
+			if path == "/registration" {
+				router.POST(path, handler.Registration)
+			} else {
+				router.POST(path, handler.ResendActivation)
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest("POST", path, strings.NewReader(`{"name":"Тест","email":"user@example.test","password":"password123"}`)))
+			if response.Code != 503 || !strings.Contains(response.Body.String(), `"code":"activation_delivery_failed"`) || response.Header().Get("Set-Cookie") != "" {
+				t.Fatal("SMTP failure must be actionable without creating a session")
+			}
+		})
+	}
+	for _, path := range []string{"/activation", "/activation/resend"} {
+		fake := &authFake{}
+		handler := NewAuthHandler(testLog(), fake)
+		router := gin.New()
+		if path == "/activation" {
+			router.POST(path, handler.Activate)
+		} else {
+			router.POST(path, handler.ResendActivation)
+		}
+		for _, body := range []string{"{} {}", "{}" + strings.Repeat(" ", 4096)} {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest("POST", path, strings.NewReader(body)))
+			if response.Code != 400 && response.Code != 413 || fake.calls != 0 {
+				t.Fatal("Invalid or oversized JSON reached service")
+			}
+		}
 	}
 }

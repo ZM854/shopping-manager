@@ -4,6 +4,8 @@ package integration_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,13 +33,13 @@ import (
 func repoFixture(t *testing.T) (*pgxpool.Pool, *auth.UserRepository, *product.ProductRepository, *auth.TokenRepository, *slog.Logger) {
 	t.Helper()
 	pool := testdb.New(t)
-	testdb.ApplyMigrations(t, pool, 0, 3)
+	testdb.ApplyMigrations(t, pool, 0, 6)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return pool, auth.NewUserRepository(pool, log), product.NewProductRepository(pool, log), auth.NewTokenRepository(pool, log), log
+	return pool, auth.NewUserRepository(pool), product.NewProductRepository(pool, log), auth.NewTokenRepository(pool, log), log
 }
 func createUser(t *testing.T, repo *auth.UserRepository, n int) auth.User {
 	t.Helper()
-	user, err := repo.Create(context.Background(), auth.CreateUserRequest{Name: fmt.Sprintf("User %d", n), Email: fmt.Sprintf("user%d@example.test", n), PasswordHash: "test-hash", ActivationToken: fmt.Sprintf("activation-%d", n)})
+	user, err := repo.Create(context.Background(), auth.CreateUserRequest{Name: fmt.Sprintf("User %d", n), Email: fmt.Sprintf("user%d@example.test", n), PasswordHash: "test-hash", Activation: testActivationState(testActivationToken(n))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,9 +47,17 @@ func createUser(t *testing.T, repo *auth.UserRepository, n int) auth.User {
 }
 func TestProductRepositoryCRUDAndUserIsolation(t *testing.T) {
 	t.Parallel()
-	_, users, repo, _, _ := repoFixture(t)
+	pool := testdb.New(t)
+	testdb.ApplyMigrations(t, pool, 0, 3)
 	ctx := context.Background()
-	first, second := createUser(t, users, 1), createUser(t, users, 2)
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash) VALUES
+		(1, 'First', 'first@example.test', 'test-hash'),
+		(2, 'Second', 'second@example.test', 'test-hash')`); err != nil {
+		t.Fatal(err)
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := product.NewProductRepository(pool, log)
+	first, second := auth.User{ID: 1}, auth.User{ID: 2}
 	items, err := repo.GetProducts(ctx, first.ID)
 	if err != nil || items == nil || len(items) != 0 {
 		t.Fatal("Empty list must be a non-nil slice")
@@ -129,22 +139,20 @@ func TestUserAndTokenRepositories(t *testing.T) {
 	if err != nil || byEmail != first {
 		t.Fatal("Email query failed")
 	}
-	byToken, err := users.GetByActivationToken(ctx, first.ActivationToken)
-	if err != nil || byToken != first {
-		t.Fatal("Activation query failed")
-	}
-	all, err := users.GetAll(ctx)
-	if err != nil || len(all) != 2 || all[0].ID != first.ID || all[1].ID != second.ID {
-		t.Fatal("User ordering failed")
-	}
-	if _, err := users.Create(ctx, auth.CreateUserRequest{Name: "Duplicate", Email: first.Email, PasswordHash: "test", ActivationToken: "distinct-token"}); !errors.Is(err, auth.ErrUserAlreadyExist) {
+	if _, err := users.Create(ctx, auth.CreateUserRequest{Name: "Duplicate", Email: first.Email, PasswordHash: "test"}); !errors.Is(err, auth.ErrUserAlreadyExist) {
 		t.Fatal("Duplicate email accepted")
 	}
-	updated, err := users.Update(ctx, first.ID, auth.UpdateUserRequest{Name: "Updated", Email: first.Email, PasswordHash: first.PasswordHash, IsEmailVerified: true, ActivationToken: first.ActivationToken})
-	if err != nil || updated.Name != "Updated" || !updated.IsEmailVerified {
-		t.Fatal("User update failed")
+	if err := users.Activate(ctx, testActivationState(testActivationToken(1)).TokenHash); err != nil {
+		t.Fatal(err)
 	}
-	for _, query := range []func() error{func() error { _, e := users.GetById(ctx, 9999); return e }, func() error { _, e := users.GetByEmail(ctx, "missing@example.test"); return e }, func() error { _, e := users.GetByActivationToken(ctx, "missing"); return e }, func() error { _, e := users.Update(ctx, 9999, auth.UpdateUserRequest{}); return e }} {
+	updated, err := users.GetById(ctx, first.ID)
+	if err != nil || updated.Name != first.Name || !updated.IsEmailVerified || updated.PasswordHash != first.PasswordHash {
+		t.Fatal("Activation changed unrelated fields")
+	}
+	for _, query := range []func() error{
+		func() error { _, err := users.GetById(ctx, 9999); return err },
+		func() error { _, err := users.GetByEmail(ctx, "missing@example.test"); return err },
+	} {
 		if !errors.Is(query(), auth.ErrUserNotFound) {
 			t.Fatal("Missing user must map to domain error")
 		}
@@ -185,13 +193,27 @@ func TestRepositoriesPropagateConnectionFailures(t *testing.T) {
 			_, e := items.CreateProduct(ctx, 1, product.CreateProductRequest{Name: "test"})
 			return e
 		}, func() error { _, e := items.UpdateProduct(ctx, 1, 1, product.UpdateProductRequest{}); return e }, func() error { return items.DeleteProduct(ctx, 1, 1) }, func() error { return items.DeleteAllProducts(ctx, 1) },
-		func() error { _, e := users.GetAll(ctx); return e }, func() error { _, e := users.GetById(ctx, 1); return e }, func() error { _, e := users.GetByEmail(ctx, "test@example.test"); return e }, func() error { _, e := users.GetByActivationToken(ctx, "test"); return e }, func() error { _, e := users.Create(ctx, auth.CreateUserRequest{}); return e }, func() error { _, e := users.Update(ctx, 1, auth.UpdateUserRequest{}); return e },
+		func() error { _, err := users.GetById(ctx, 1); return err },
+		func() error { _, err := users.GetByEmail(ctx, "test@example.test"); return err },
+		func() error { _, err := users.Create(ctx, auth.CreateUserRequest{}); return err },
+		func() error { return users.Activate(ctx, "hash") },
 		func() error { return tokens.Save(ctx, 1, "hash") }, func() error { _, e := tokens.FindByUserId(ctx, 1); return e }, func() error { return tokens.DeleteByUserId(ctx, 1) },
 	}
 	for i, operation := range operations {
 		if err := operation(); err == nil {
 			t.Fatalf("Operation %d suppressed DB failure", i)
 		}
+	}
+}
+
+func testActivationToken(n int) string { return fmt.Sprintf("00000000-0000-4000-8000-%012d", n) }
+
+func testActivationState(token string) auth.ActivationState {
+	sum := sha256.Sum256([]byte(token))
+	return auth.ActivationState{
+		TokenHash:  hex.EncodeToString(sum[:]),
+		ExpiresAt:  time.Now().UTC().Add(time.Hour),
+		NextSendAt: time.Now().UTC().Add(-time.Minute),
 	}
 }
 
@@ -203,10 +225,9 @@ func (m *activationCapture) SendActivationMail(_ context.Context, _ string, link
 }
 func TestAuthHTTPWithPostgres(t *testing.T) {
 	pool, users, _, tokens, log := repoFixture(t)
-	testdb.ApplyMigrations(t, pool, 3, 5)
 	tokenService := auth.NewTokenService(log, tokens, "test-access-secret", "test-refresh-secret", time.Minute, time.Hour)
 	mail := &activationCapture{}
-	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://example.test/api/activate"), "http://client.example.test/login"), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
+	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions())), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
 	request := func(method, path, body, bearer string, cookie *http.Cookie) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Idempotency-Key", "auth-http-action-01")
@@ -239,8 +260,8 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	if w := request("POST", "/api/login", loginBody, "", nil); w.Code != 403 {
 		t.Fatal("Inactive login must be rejected")
 	}
-	activationPath := strings.TrimPrefix(mail.link, "http://example.test")
-	if w := request("GET", activationPath, "", "", nil); w.Code != 302 {
+	activationToken := mail.link[strings.LastIndex(mail.link, "/")+1:]
+	if w := request("POST", "/api/activation", `{"token":"`+activationToken+`"}`, "", nil); w.Code != 204 {
 		t.Fatal("Activation failed")
 	}
 	login := request("POST", "/api/login", loginBody, "", nil)

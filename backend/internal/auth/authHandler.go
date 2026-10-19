@@ -2,11 +2,15 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 const (
@@ -19,24 +23,22 @@ type authService interface {
 	Login(context.Context, string, string) (AuthResult, error)
 	Logout(context.Context, string) error
 	Activate(context.Context, string) error
+	ResendActivation(context.Context, string) error
 	Refresh(context.Context, string) (AuthResult, error)
 }
 
 type AuthHandler struct {
-	userService       authService
-	log               *slog.Logger
-	clientRedirectURL string
+	userService authService
+	log         *slog.Logger
 }
 
 func NewAuthHandler(
 	log *slog.Logger,
 	userService authService,
-	clientRedirectURL string,
 ) *AuthHandler {
 	return &AuthHandler{
-		log:               log.With("component", "handler", "entity", "auth"),
-		userService:       userService,
-		clientRedirectURL: clientRedirectURL,
+		log:         log.With("component", "handler", "entity", "auth"),
+		userService: userService,
 	}
 }
 
@@ -53,6 +55,11 @@ func (h *AuthHandler) Registration(c *gin.Context) {
 	)
 	if errors.Is(err, ErrUserAlreadyExist) {
 		writeAuthError(c, http.StatusConflict, "user_already_exists", "Пользователь с таким email уже существует")
+		return
+	}
+	if errors.Is(err, ErrActivationDelivery) {
+		writeAuthError(c, http.StatusServiceUnavailable, "activation_delivery_failed",
+			"Аккаунт создан, но письмо не отправлено. Попробуйте запросить новое письмо позже.")
 		return
 	}
 	if err != nil {
@@ -111,9 +118,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) Activate(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Referrer-Policy", "no-referrer")
-	err := h.userService.Activate(c.Request.Context(), c.Param("link"))
+	var req ActivationRequest
+	if !bindActivationRequest(c, &req) {
+		return
+	}
+	err := h.userService.Activate(c.Request.Context(), req.Token)
 	if errors.Is(err, ErrInvalidActivation) {
-		writeAuthError(c, http.StatusBadRequest, "invalid_activation", "Недействительная ссылка активации")
+		writeAuthError(c, http.StatusBadRequest, "invalid_activation", "Ссылка недействительна или срок её действия истёк. Запросите новое письмо.")
 		return
 	}
 	if err != nil {
@@ -123,7 +134,53 @@ func (h *AuthHandler) Activate(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusFound, h.clientRedirectURL)
+	c.Status(http.StatusNoContent)
+}
+
+func bindActivationRequest(c *gin.Context, req any) bool {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	payload, err := io.ReadAll(c.Request.Body)
+	if err == nil {
+		err = json.Unmarshal(payload, req)
+	}
+	if err == nil {
+		err = binding.Validator.ValidateStruct(req)
+	}
+	if err != nil {
+		var sizeError *http.MaxBytesError
+		if errors.As(err, &sizeError) {
+			writeAuthError(c, http.StatusRequestEntityTooLarge, "body_too_large", "Слишком большой запрос")
+		} else {
+			writeAuthError(c, http.StatusBadRequest, "validation_failed", "Проверьте поля запроса")
+		}
+		return false
+	}
+	return true
+}
+
+func (h *AuthHandler) ResendActivation(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	var req ResendActivationRequest
+	if !bindActivationRequest(c, &req) {
+		return
+	}
+	err := h.userService.ResendActivation(c.Request.Context(), req.Email)
+	var cooldown *ActivationCooldownError
+	if errors.As(err, &cooldown) {
+		c.Header("Retry-After", strconv.Itoa(cooldown.RetryAfter))
+		writeAuthError(c, http.StatusTooManyRequests, "activation_cooldown", "Письмо уже запрошено. Подождите немного перед повторной отправкой.")
+		return
+	}
+	if errors.Is(err, ErrActivationDelivery) {
+		writeAuthError(c, http.StatusServiceUnavailable, "activation_delivery_failed", "Не удалось отправить письмо. Повторите запрос позже.")
+		return
+	}
+	if err != nil {
+		h.log.Error("failed to resend activation email")
+		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось запросить письмо")
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "Если аккаунт ожидает подтверждения, на этот адрес отправлено письмо."})
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {

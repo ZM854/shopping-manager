@@ -17,7 +17,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 	engine := New(
 		log,
 		shopping.NewHandler(nil, log),
-		auth.NewAuthHandler(log, nil, "http://localhost:5173/login"),
+		auth.NewAuthHandler(log, nil),
 		middleware.NewAuthMiddleware(nil),
 		"http://localhost:5173",
 	)
@@ -45,6 +45,10 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 		{http.MethodGet, "/products", http.StatusNotFound},
 		{http.MethodGet, "/api/users", http.StatusNotFound},
 		{http.MethodGet, "/users", http.StatusNotFound},
+		{http.MethodGet, "/api/activate/test-token", http.StatusNotFound},
+		{http.MethodGet, "/api/activation/test-token", http.StatusNotFound},
+		{http.MethodPost, "/api/activation", http.StatusBadRequest},
+		{http.MethodPost, "/api/activation/resend", http.StatusBadRequest},
 		// Public auth routes must reach validation without requiring a bearer token.
 		{http.MethodPost, "/api/login", http.StatusBadRequest},
 		{http.MethodPost, "/login", http.StatusNotFound},
@@ -63,7 +67,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 
 func TestCORSAllowedAndRejectedOrigins(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, "http://client.example.test/login"), middleware.NewAuthMiddleware(nil), "http://client.example.test")
+	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil), middleware.NewAuthMiddleware(nil), "http://client.example.test")
 	for _, test := range []struct {
 		origin string
 		status int

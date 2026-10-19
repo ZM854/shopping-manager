@@ -55,7 +55,8 @@ func New(
 	api.POST("/registration", authHandler.Registration)
 	api.POST("/login", authHandler.Login)
 	api.POST("/logout", authHandler.Logout)
-	api.GET("/activate/:link", authHandler.Activate)
+	api.POST("/activation", authHandler.Activate)
+	api.POST("/activation/resend", authHandler.ResendActivation)
 	api.POST("/refresh", authHandler.Refresh)
 
 	shoppingAPI := api.Group("")

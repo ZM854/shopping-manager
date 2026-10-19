@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
 
 	"github.com/wneessen/go-mail"
@@ -65,10 +66,11 @@ func (s *MailService) SendActivationMail(ctx context.Context, to string, link st
 		mail.TypeTextHTML,
 		fmt.Sprintf(`
 		<div>
-			<h1>Для активации перейдите по ссылке</h1>
+			<h1>Подтверждение почты</h1>
+			<p>Откройте ссылку и нажмите «Подтвердить почту».</p>
 			<a href="%s">%s</a>
 		</div>
-		`, link, link),
+		`, html.EscapeString(link), html.EscapeString(link)),
 	)
 
 	s.log.Info("sending activation email", "to", to)
@@ -77,7 +79,6 @@ func (s *MailService) SendActivationMail(ctx context.Context, to string, link st
 		s.log.Error(
 			"failed to send activation email",
 			"to", to,
-			"error", err,
 		)
 		return err
 	}

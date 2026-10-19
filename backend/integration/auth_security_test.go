@@ -24,14 +24,14 @@ func TestLegacyUnverifiedRefreshIsRevoked(t *testing.T) {
 	if err := service.SaveToken(ctx, user.ID, pair.RefreshToken); err != nil {
 		t.Fatal(err)
 	}
-	authService := auth.NewUserService(log, users, service, nil, "")
+	authService := auth.NewUserService(log, users, service, nil, "", auth.DefaultActivationOptions())
 	if _, err := authService.Refresh(ctx, pair.RefreshToken); !errors.Is(err, auth.ErrUserNotActivated) {
 		t.Fatal("Unverified legacy session must not refresh")
 	}
 	if _, err := tokens.FindByUserId(ctx, user.ID); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
 		t.Fatal("Rejected legacy session remains in the database")
 	}
-	if err := authService.Activate(ctx, user.ActivationToken); err != nil {
+	if err := authService.Activate(ctx, testActivationToken(1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := authService.Refresh(ctx, pair.RefreshToken); !errors.Is(err, auth.ErrRefreshTokenNotFound) {

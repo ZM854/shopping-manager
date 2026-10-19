@@ -76,15 +76,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	userRepo := auth.NewUserRepository(db, log)
+	userRepo := auth.NewUserRepository(db)
 	userService := auth.NewUserService(
 		log,
 		userRepo,
 		tokenService,
 		mailService,
-		cfg.PublicAPIURL+"/activate",
+		cfg.FrontendURL+"/activation",
+		auth.ActivationOptions{
+			TTL:            cfg.ActivationTTL,
+			ResendInterval: cfg.ActivationResendInterval,
+			MailTimeout:    cfg.ActivationMailTimeout,
+		},
 	)
-	authHandler := auth.NewAuthHandler(log, userService, cfg.FrontendURL+"/login")
+	authHandler := auth.NewAuthHandler(log, userService)
 
 	authMiddleware := middleware.NewAuthMiddleware(tokenService)
 
