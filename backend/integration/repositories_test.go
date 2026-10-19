@@ -224,6 +224,17 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	if registered.Code != 201 || mail.link == "" {
 		t.Fatalf("Registration failed: %s", registered.Body.String())
 	}
+	if registered.Header().Get("Set-Cookie") != "" ||
+		strings.TrimSpace(registered.Body.String()) != `{"activationRequired":true}` {
+		t.Fatal("Registration must not expose tokens or create a cookie")
+	}
+	var sessionCount int
+	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM refresh_tokens").Scan(&sessionCount); err != nil || sessionCount != 0 {
+		t.Fatal("Registration must not persist a refresh session")
+	}
+	if w := request("GET", "/api/users", "", "", nil); w.Code != 404 {
+		t.Fatal("User directory must not be public")
+	}
 	loginBody := `{"email":"flow@example.test","password":"password123"}`
 	if w := request("POST", "/api/login", loginBody, "", nil); w.Code != 403 {
 		t.Fatal("Inactive login must be rejected")
@@ -236,12 +247,18 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	if login.Code != 200 {
 		t.Fatalf("Login failed: %s", login.Body.String())
 	}
+	if strings.Contains(login.Body.String(), "refreshToken") ||
+		strings.Contains(login.Body.String(), "PasswordHash") ||
+		strings.Contains(login.Body.String(), "ActivationToken") ||
+		login.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("Login leaked secrets or allowed caching")
+	}
 	var session auth.AuthResponse
 	if err := json.Unmarshal(login.Body.Bytes(), &session); err != nil {
 		t.Fatal(err)
 	}
 	cookie := login.Result().Cookies()[0]
-	listResponse := request("POST", "/api/shopping-lists", `{"name":"Покупки"}`, session.AccesToken, nil)
+	listResponse := request("POST", "/api/shopping-lists", `{"name":"Покупки"}`, session.AccessToken, nil)
 	var list shopping.List
 	if listResponse.Code != 201 {
 		t.Fatalf("List failed: %s", listResponse.Body.String())
@@ -249,7 +266,7 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	if err := json.Unmarshal(listResponse.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
-	created := request("POST", fmt.Sprintf("/api/shopping-lists/%d/items", list.ID), `{"name":"Молоко","quantity":"1.5","unit":"л"}`, session.AccesToken, nil)
+	created := request("POST", fmt.Sprintf("/api/shopping-lists/%d/items", list.ID), `{"name":"Молоко","quantity":"1.5","unit":"л"}`, session.AccessToken, nil)
 	if created.Code != 201 {
 		t.Fatalf("Product failed: %s", created.Body.String())
 	}
@@ -264,12 +281,12 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	}
 	path := fmt.Sprintf("/api/shopping-lists/%d/items/%d", list.ID, item.ID)
 	for _, method := range []string{"GET", "PATCH", "DELETE"} {
-		w := request(method, path, `{"name":"foreign","quantity":"1"}`, secondTokens.AccesToken, nil)
+		w := request(method, path, `{"name":"foreign","quantity":"1"}`, secondTokens.AccessToken, nil)
 		if w.Code != 404 {
 			t.Fatalf("Foreign %s returned %d", method, w.Code)
 		}
 	}
-	if w := request("GET", path, "", session.AccesToken, nil); w.Code != 200 {
+	if w := request("GET", path, "", session.AccessToken, nil); w.Code != 200 {
 		t.Fatal("Foreign operations changed owner's item")
 	}
 	refresh := request("POST", "/api/refresh", "", "", cookie)

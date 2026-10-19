@@ -22,7 +22,6 @@ type userStore interface {
 	GetById(context.Context, int64) (User, error)
 	GetByActivationToken(context.Context, string) (User, error)
 	Update(context.Context, int64, UpdateUserRequest) (User, error)
-	GetAll(context.Context) ([]User, error)
 }
 
 type userTokens interface {
@@ -66,8 +65,7 @@ func (s *UserService) Registration(
 	name string,
 	email string,
 	password string,
-
-) (AuthResponse, error) {
+) (RegistrationResponse, error) {
 	passwordHash, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		bcrypt.DefaultCost,
@@ -75,12 +73,12 @@ func (s *UserService) Registration(
 
 	if err != nil {
 		s.log.Error("failed to hash password", "error", err)
-		return AuthResponse{}, err
+		return RegistrationResponse{}, err
 	}
 
 	activationToken := uuid.NewString()
 
-	user, err := s.userRepository.Create(
+	_, err = s.userRepository.Create(
 		ctx,
 		CreateUserRequest{
 			Name:            name,
@@ -90,12 +88,8 @@ func (s *UserService) Registration(
 		},
 	)
 
-	if errors.Is(err, ErrUserAlreadyExist) {
-		return AuthResponse{}, err
-	}
-
 	if err != nil {
-		return AuthResponse{}, err
+		return RegistrationResponse{}, err
 	}
 
 	s.mailService.SendActivationMail(
@@ -108,23 +102,7 @@ func (s *UserService) Registration(
 		),
 	)
 
-	tokens, err := s.tokenService.GenerateTokens(user.ID)
-
-	if err != nil {
-		return AuthResponse{}, err
-	}
-
-	if err := s.tokenService.SaveToken(
-		ctx, user.ID,
-		tokens.RefreshToken,
-	); err != nil {
-		return AuthResponse{}, err
-	}
-
-	return AuthResponse{
-		User:      NewUserDTO(user),
-		TokenPair: tokens,
-	}, nil
+	return RegistrationResponse{ActivationRequired: true}, nil
 }
 
 func (s *UserService) Activate(ctx context.Context, activationLink string) error {
@@ -151,32 +129,32 @@ func (s *UserService) Activate(ctx context.Context, activationLink string) error
 	return err
 }
 
-func (s *UserService) Login(ctx context.Context, email string, password string) (AuthResponse, error) {
+func (s *UserService) Login(ctx context.Context, email string, password string) (AuthResult, error) {
 
 	user, err := s.userRepository.GetByEmail(ctx, email)
 
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			return AuthResponse{}, ErrInvalidCredentials
+			return AuthResult{}, ErrInvalidCredentials
 		}
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
 	if err = bcrypt.CompareHashAndPassword(
 		[]byte(user.PasswordHash),
 		[]byte(password),
 	); err != nil {
-		return AuthResponse{}, ErrInvalidCredentials
+		return AuthResult{}, ErrInvalidCredentials
 	}
 
 	if user.IsEmailVerified == false {
-		return AuthResponse{}, ErrUserNotActivated
+		return AuthResult{}, ErrUserNotActivated
 	}
 
 	tokens, err := s.tokenService.GenerateTokens(user.ID)
 
 	if err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
 	if err = s.tokenService.SaveToken(
@@ -184,13 +162,13 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 		user.ID,
 		tokens.RefreshToken,
 	); err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
-	return AuthResponse{
-		User:      NewUserDTO(user),
-		TokenPair: tokens,
-	}, err
+	return AuthResult{
+		User:   NewUserDTO(user),
+		Tokens: tokens,
+	}, nil
 }
 
 func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
@@ -203,45 +181,47 @@ func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
 	return s.tokenService.RemoveToken(ctx, claims.UserID)
 }
 
-func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthResponse, error) {
+func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthResult, error) {
 	claims, err := s.tokenService.ValidateRefreshToken(refreshToken)
 
 	if err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
 	_, err = s.tokenService.FindToken(ctx, claims.UserID, refreshToken)
 
 	if err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
 	user, err := s.userRepository.GetById(ctx, claims.UserID)
 
 	if err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
+	}
+
+	if !user.IsEmailVerified {
+		if err := s.tokenService.RemoveToken(ctx, user.ID); err != nil &&
+			!errors.Is(err, ErrRefreshTokenNotFound) {
+			return AuthResult{}, err
+		}
+		return AuthResult{}, ErrUserNotActivated
 	}
 
 	tokens, err := s.tokenService.GenerateTokens(user.ID)
 
 	if err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
 	err = s.tokenService.SaveToken(ctx, user.ID, tokens.RefreshToken)
 
 	if err != nil {
-		return AuthResponse{}, err
+		return AuthResult{}, err
 	}
 
-	return AuthResponse{
-		User:      NewUserDTO(user),
-		TokenPair: tokens,
+	return AuthResult{
+		User:   NewUserDTO(user),
+		Tokens: tokens,
 	}, nil
-}
-
-func (s *UserService) GetAllUsers(
-	ctx context.Context,
-) ([]User, error) {
-	return s.userRepository.GetAll(ctx)
 }

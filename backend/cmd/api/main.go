@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
 
@@ -14,7 +15,11 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("invalid application configuration", "error", err)
+		os.Exit(1)
+	}
 
 	appEnv := cfg.AppENV
 

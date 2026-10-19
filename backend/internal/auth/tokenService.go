@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -56,6 +57,9 @@ func NewTokenService(
 }
 
 func (s *TokenService) GenerateTokens(userId int64) (TokenPair, error) {
+	if userId <= 0 {
+		return TokenPair{}, ErrInvalidToken
+	}
 	now := time.Now()
 
 	accessClaims := TokenClaims{
@@ -96,39 +100,39 @@ func (s *TokenService) GenerateTokens(userId int64) (TokenPair, error) {
 
 	s.log.Debug("tokens generated", "user_id", userId)
 	return TokenPair{
-		AccesToken:   accessToken,
+		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil
 }
 
 func (s *TokenService) ValidateAccessToken(tokenString string) (*TokenClaims, error) {
-	return s.validateToken(tokenString, s.accessSecret)
+	return s.validateToken(tokenString, s.accessSecret, "access")
 }
 
 func (s *TokenService) ValidateRefreshToken(tokenString string) (*TokenClaims, error) {
-	return s.validateToken(tokenString, s.refreshSecret)
+	return s.validateToken(tokenString, s.refreshSecret, "refresh")
 }
 
-func (s *TokenService) validateToken(tokenString string, secret []byte) (*TokenClaims, error) {
+func (s *TokenService) validateToken(tokenString string, secret []byte, subject string) (*TokenClaims, error) {
 	claims := &TokenClaims{}
 
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		claims,
-		func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, ErrInvalidToken
-			}
+		func(_ *jwt.Token) (any, error) {
 			return secret, nil
 		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(),
+		jwt.WithSubject(subject),
 	)
 
 	if err != nil {
 		s.log.Debug("token validation failed", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 
-	if !token.Valid {
+	if !token.Valid || claims.UserID <= 0 {
 		return nil, ErrInvalidToken
 	}
 

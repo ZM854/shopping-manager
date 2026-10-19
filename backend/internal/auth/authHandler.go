@@ -15,12 +15,11 @@ const (
 )
 
 type authService interface {
-	Registration(context.Context, string, string, string) (AuthResponse, error)
-	Login(context.Context, string, string) (AuthResponse, error)
+	Registration(context.Context, string, string, string) (RegistrationResponse, error)
+	Login(context.Context, string, string) (AuthResult, error)
 	Logout(context.Context, string) error
 	Activate(context.Context, string) error
-	Refresh(context.Context, string) (AuthResponse, error)
-	GetAllUsers(context.Context) ([]User, error)
+	Refresh(context.Context, string) (AuthResult, error)
 }
 
 type AuthHandler struct {
@@ -42,148 +41,85 @@ func NewAuthHandler(
 }
 
 func (h *AuthHandler) Registration(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	var req RegistrationRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request body",
-		})
+		writeAuthError(c, http.StatusBadRequest, "validation_failed", "Проверьте поля запроса")
 		return
 	}
 
 	resp, err := h.userService.Registration(
-		c.Request.Context(),
-		req.Name,
-		req.Email,
-		req.Password,
+		c.Request.Context(), req.Name, req.Email, req.Password,
 	)
-
 	if errors.Is(err, ErrUserAlreadyExist) {
-		c.JSON(http.StatusConflict, gin.H{
-			"error": "user already exist",
-		})
+		writeAuthError(c, http.StatusConflict, "user_already_exists", "Пользователь с таким email уже существует")
 		return
 	}
-
 	if err != nil {
-		h.log.Error(
-			"failed to register user",
-			"email", req.Email,
-			"error", err,
-		)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to register user",
-		})
+		h.log.Error("failed to register user", "error", err)
+		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось зарегистрироваться")
 		return
 	}
-
-	h.setRefreshCookie(c, resp.RefreshToken)
 
 	c.JSON(http.StatusCreated, resp)
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	var req LoginRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request body",
-		})
+		writeAuthError(c, http.StatusBadRequest, "validation_failed", "Проверьте поля запроса")
 		return
 	}
 
-	resp, err := h.userService.Login(
-		c.Request.Context(),
-		req.Email,
-		req.Password,
-	)
-
+	result, err := h.userService.Login(c.Request.Context(), req.Email, req.Password)
 	if errors.Is(err, ErrInvalidCredentials) {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "invalid email or password",
-		})
+		writeAuthError(c, http.StatusUnauthorized, "invalid_credentials", "Неверный email или пароль")
 		return
 	}
-
 	if errors.Is(err, ErrUserNotActivated) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "email is not activated",
-		})
+		writeAuthError(c, http.StatusForbidden, "email_not_verified", "Подтвердите email перед входом")
 		return
 	}
-
 	if err != nil {
-		h.log.Error(
-			"failed to login",
-			"email", req.Email,
-			"error", err,
-		)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to login",
-		})
+		h.log.Error("failed to login", "error", err)
+		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось выполнить вход")
 		return
 	}
 
-	h.setRefreshCookie(c, resp.RefreshToken)
-
-	c.JSON(http.StatusOK, resp)
+	h.writeSession(c, result)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	refreshToken, err := c.Cookie(refreshCookieName)
-
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "refresh token is missing",
-		})
+		writeAuthError(c, http.StatusUnauthorized, "unauthorized", "Требуется авторизация")
 		return
 	}
 
-	err = h.userService.Logout(c.Request.Context(), refreshToken)
-
-	if err != nil {
-		h.log.Error(
-			"failed to logout",
-			"error", err,
-		)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to logout",
-		})
+	if err := h.userService.Logout(c.Request.Context(), refreshToken); err != nil {
+		h.log.Error("failed to logout", "error", err)
+		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось завершить сессию")
 		return
 	}
 
 	h.clearRefreshCookie(c)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "logged out",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Выход выполнен"})
 }
 
 func (h *AuthHandler) Activate(c *gin.Context) {
-	activationLink := c.Param("link")
-
-	err := h.userService.Activate(c.Request.Context(), activationLink)
-
+	c.Header("Cache-Control", "no-store")
+	c.Header("Referrer-Policy", "no-referrer")
+	err := h.userService.Activate(c.Request.Context(), c.Param("link"))
 	if errors.Is(err, ErrInvalidActivation) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid activation link",
-		})
+		writeAuthError(c, http.StatusBadRequest, "invalid_activation", "Недействительная ссылка активации")
 		return
 	}
-
 	if err != nil {
-		h.log.Error(
-			"failed to activate user",
-			"activation_link", activationLink,
-			"error", err,
-		)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to activate email",
-		})
+		// An activation token may occur in a dependency error as well as the URL.
+		h.log.Error("failed to activate user")
+		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось подтвердить email")
 		return
 	}
 
@@ -191,75 +127,48 @@ func (h *AuthHandler) Activate(c *gin.Context) {
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	refreshToken, err := c.Cookie(refreshCookieName)
-
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "refresh token is missing",
-		})
+		writeAuthError(c, http.StatusUnauthorized, "unauthorized", "Требуется авторизация")
 		return
 	}
 
-	resp, err := h.userService.Refresh(c.Request.Context(), refreshToken)
-
+	result, err := h.userService.Refresh(c.Request.Context(), refreshToken)
+	if errors.Is(err, ErrUserNotActivated) {
+		writeAuthError(c, http.StatusForbidden, "email_not_verified", "Подтвердите email перед входом")
+		return
+	}
+	if errors.Is(err, ErrInvalidToken) || errors.Is(err, ErrRefreshTokenNotFound) ||
+		errors.Is(err, ErrUserNotFound) {
+		writeAuthError(c, http.StatusUnauthorized, "unauthorized", "Сессия недействительна, войдите снова")
+		return
+	}
 	if err != nil {
-		h.log.Error(
-			"failed to refresh token",
-			"error", err,
-		)
-
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "invalid refresh token",
-		})
+		h.log.Error("failed to refresh token", "error", err)
+		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось обновить сессию")
 		return
 	}
 
-	h.setRefreshCookie(c, resp.RefreshToken)
-
-	c.JSON(http.StatusOK, resp)
+	h.writeSession(c, result)
 }
 
-func (h *AuthHandler) GetUsers(c *gin.Context) {
-	users, err := h.userService.GetAllUsers(c.Request.Context())
-
-	if err != nil {
-		h.log.Error(
-			"failed to get users",
-			"error", err,
-		)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get users",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, users)
+func writeAuthError(c *gin.Context, status int, code string, message string) {
+	c.JSON(status, gin.H{"code": code, "message": message})
 }
 
-func (h *AuthHandler) setRefreshCookie(
-	c *gin.Context,
-	token string,
-) {
-	c.SetCookie(
-		refreshCookieName,
-		token,
-		refreshCookieAge,
-		"/",
-		"",
-		false,
-		true,
-	)
+func (h *AuthHandler) writeSession(c *gin.Context, result AuthResult) {
+	h.setRefreshCookie(c, result.Tokens.RefreshToken)
+	c.JSON(http.StatusOK, AuthResponse{
+		User:        result.User,
+		AccessToken: result.Tokens.AccessToken,
+	})
+}
+
+func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string) {
+	c.SetCookie(refreshCookieName, token, refreshCookieAge, "/", "", false, true)
 }
 
 func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
-	c.SetCookie(
-		refreshCookieName,
-		"",
-		-1,
-		"/",
-		"",
-		false,
-		true,
-	)
+	c.SetCookie(refreshCookieName, "", -1, "/", "", false, true)
 }

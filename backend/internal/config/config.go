@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -38,7 +39,7 @@ type Config struct {
 	SMTPTLSRequired bool
 }
 
-func Load() Config {
+func Load() (Config, error) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Println(".env file not found")
@@ -53,6 +54,38 @@ func Load() Config {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:5173"
 	}
+	accessTTL, err := parseDuration("JWT_ACCESS_TTL", os.Getenv("JWT_ACCESS_TTL"), 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	refreshTTL, err := parseDuration("JWT_REFRESH_TTL", os.Getenv("JWT_REFRESH_TTL"), 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	if refreshTTL <= accessTTL {
+		return Config{}, fmt.Errorf("JWT_REFRESH_TTL must exceed JWT_ACCESS_TTL")
+	}
+	accessSecret := os.Getenv("JWT_ACCESS_SECRET")
+	refreshSecret := os.Getenv("JWT_REFRESH_SECRET")
+	for _, secret := range []struct{ name, value string }{
+		{"JWT_ACCESS_SECRET", accessSecret},
+		{"JWT_REFRESH_SECRET", refreshSecret},
+	} {
+		if len(secret.value) < 32 || strings.TrimSpace(secret.value) == "" {
+			return Config{}, fmt.Errorf("%s must contain at least 32 bytes and must not be blank", secret.name)
+		}
+	}
+	if accessSecret == refreshSecret {
+		return Config{}, fmt.Errorf("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ")
+	}
+	smtpAuth, err := parseBool("SMTP_AUTH_ENABLED", os.Getenv("SMTP_AUTH_ENABLED"), true)
+	if err != nil {
+		return Config{}, err
+	}
+	smtpTLS, err := parseBool("SMTP_TLS_REQUIRED", os.Getenv("SMTP_TLS_REQUIRED"), true)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		AppENV:       os.Getenv("APP_ENV"),
 		ServerPort:   serverPort,
@@ -66,38 +99,40 @@ func Load() Config {
 		DBName:     os.Getenv("DB_NAME"),
 		DBSSLMode:  os.Getenv("DB_SSLMODE"),
 
-		JWTAccessSecret:  os.Getenv("JWT_ACCESS_SECRET"),
-		JWTRefreshSecret: os.Getenv("JWT_REFRESH_SECRET"),
+		JWTAccessSecret:  accessSecret,
+		JWTRefreshSecret: refreshSecret,
 
-		JWTAccessTTL:  parseDuration(os.Getenv("JWT_ACCESS_TTL"), 15*time.Minute),
-		JWTRefreshTTL: parseDuration(os.Getenv("JWT_REFRESH_TTL"), 30*24*time.Hour),
+		JWTAccessTTL:  accessTTL,
+		JWTRefreshTTL: refreshTTL,
 
 		SMTPHost:        os.Getenv("SMTP_HOST"),
 		SMTPPort:        os.Getenv("SMTP_PORT"),
 		SMTPUser:        os.Getenv("SMTP_USER"),
 		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:        os.Getenv("SMTP_FROM"),
-		SMTPAuthEnabled: parseBool(os.Getenv("SMTP_AUTH_ENABLED"), true),
-		SMTPTLSRequired: parseBool(os.Getenv("SMTP_TLS_REQUIRED"), true),
-	}
+		SMTPAuthEnabled: smtpAuth,
+		SMTPTLSRequired: smtpTLS,
+	}, nil
 }
 
-func parseDuration(value string, fallback time.Duration) time.Duration {
-	d, err := time.ParseDuration(value)
-
-	if err != nil {
-		return fallback
-	}
-	return d
-}
-
-func parseBool(value string, fallback bool) bool {
+func parseDuration(name string, value string, fallback time.Duration) (time.Duration, error) {
 	if value == "" {
-		return fallback
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d < time.Second {
+		return 0, fmt.Errorf("%s must be a duration of at least 1s", name)
+	}
+	return d, nil
+}
+
+func parseBool(name string, value string, fallback bool) (bool, error) {
+	if value == "" {
+		return fallback, nil
 	}
 	result, err := strconv.ParseBool(value)
 	if err != nil {
-		log.Fatalf("invalid boolean configuration value %q", value)
+		return false, fmt.Errorf("%s must be a boolean", name)
 	}
-	return result
+	return result, nil
 }

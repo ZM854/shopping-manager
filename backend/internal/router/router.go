@@ -57,7 +57,6 @@ func New(
 	api.POST("/logout", authHandler.Logout)
 	api.GET("/activate/:link", authHandler.Activate)
 	api.POST("/refresh", authHandler.Refresh)
-	api.GET("/users", authHandler.GetUsers)
 
 	shoppingAPI := api.Group("")
 	shoppingAPI.Use(authMiddleware.HandleAuth())

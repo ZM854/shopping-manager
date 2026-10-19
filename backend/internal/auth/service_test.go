@@ -55,14 +55,10 @@ func (f *usersFake) Update(ctx context.Context, id int64, r UpdateUserRequest) (
 	f.updated = r
 	return f.user, f.updateErr
 }
-func (f *usersFake) GetAll(ctx context.Context) ([]User, error) {
-	f.ctx = ctx
-	return []User{f.user}, f.err
-}
 
 type tokensFake struct {
 	generateErr, saveErr, validateErr, findErr, removeErr error
-	generated, saved                                      int
+	generated, saved, removed                             int
 	id                                                    int64
 	token                                                 string
 	ctx                                                   context.Context
@@ -71,7 +67,7 @@ type tokensFake struct {
 func (f *tokensFake) GenerateTokens(id int64) (TokenPair, error) {
 	f.generated++
 	f.id = id
-	return TokenPair{AccesToken: "test-access", RefreshToken: "test-refresh"}, f.generateErr
+	return TokenPair{AccessToken: "test-access", RefreshToken: "test-refresh"}, f.generateErr
 }
 func (f *tokensFake) SaveToken(ctx context.Context, id int64, s string) error {
 	f.saved++
@@ -91,6 +87,7 @@ func (f *tokensFake) FindToken(ctx context.Context, id int64, s string) (*Refres
 	return &RefreshToken{UserID: id}, f.findErr
 }
 func (f *tokensFake) RemoveToken(ctx context.Context, id int64) error {
+	f.removed++
 	f.ctx = ctx
 	f.id = id
 	return f.removeErr
@@ -121,17 +118,17 @@ func TestRegistrationHashesPasswordAndSendsActivation(t *testing.T) {
 	if repo.created.ActivationToken == "" || mail.to != "user@example.test" || mail.link != "https://example.test/api/activate/"+repo.created.ActivationToken || mail.calls != 1 {
 		t.Fatal("Incorrect activation email")
 	}
-	if resp.User.ID != 42 || resp.User.Name != "Имя" || repo.ctx != ctx || tokens.ctx != ctx || tokens.id != 42 || tokens.saved != 1 {
+	if !resp.ActivationRequired || repo.ctx != ctx || tokens.generated != 0 || tokens.saved != 0 {
 		t.Fatal("Registration data or context lost")
 	}
-	data, _ := json.Marshal(resp.User)
+	data, _ := json.Marshal(resp)
 	if strings.Contains(string(data), repo.created.PasswordHash) || strings.Contains(string(data), repo.created.ActivationToken) {
 		t.Fatal("Private user fields leaked into DTO")
 	}
 }
 func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 	problem := errors.New("dependency failed")
-	for _, stage := range []string{"hash", "duplicate", "repository", "generate", "save"} {
+	for _, stage := range []string{"hash", "duplicate", "repository"} {
 		t.Run(stage, func(t *testing.T) {
 			r, ts, m := &usersFake{}, &tokensFake{}, &mailFake{}
 			password := "password123"
@@ -145,10 +142,6 @@ func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 				want = ErrUserAlreadyExist
 			case "repository":
 				r.err = problem
-			case "generate":
-				ts.generateErr = problem
-			case "save":
-				ts.saveErr = problem
 			}
 			_, err := NewUserService(testLog(), r, ts, m, "http://example.test/activate").Registration(context.Background(), "Имя", "user@example.test", password)
 			if !errors.Is(err, want) {
@@ -158,9 +151,6 @@ func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 				if m.calls != 0 || ts.generated != 0 || ts.saved != 0 {
 					t.Fatal("Failed registration continued")
 				}
-			}
-			if stage == "generate" && ts.saved != 0 {
-				t.Fatal("Failed generation persisted token")
 			}
 		})
 	}
@@ -238,7 +228,7 @@ func TestActivationPreservesUserFields(t *testing.T) {
 }
 func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 	problem := errors.New("dependency failed")
-	for _, stage := range []string{"success", "validate", "find", "user", "generate", "save"} {
+	for _, stage := range []string{"success", "validate", "find", "user", "inactive", "revoke", "already_revoked", "generate", "save"} {
 		t.Run(stage, func(t *testing.T) {
 			r := &usersFake{user: User{ID: 42, IsEmailVerified: true}}
 			ts := &tokensFake{}
@@ -253,6 +243,16 @@ func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 			case "user":
 				r.err = problem
 				want = problem
+			case "inactive", "revoke", "already_revoked":
+				r.user.IsEmailVerified = false
+				want = ErrUserNotActivated
+				if stage == "revoke" {
+					ts.removeErr = problem
+					want = problem
+				}
+				if stage == "already_revoked" {
+					ts.removeErr = ErrRefreshTokenNotFound
+				}
 			case "generate":
 				ts.generateErr = problem
 				want = problem
@@ -267,7 +267,12 @@ func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 			if stage == "success" && (resp.User.ID != 42 || ts.saved != 1 || ts.token != "test-refresh") {
 				t.Fatal("Refresh did not persist replacement")
 			}
-			if stage == "validate" || stage == "find" || stage == "user" {
+			if stage == "inactive" || stage == "revoke" || stage == "already_revoked" {
+				if ts.removed != 1 || ts.id != 42 {
+					t.Fatal("Inactive user's legacy refresh must be revoked")
+				}
+			}
+			if stage != "success" && stage != "generate" && stage != "save" {
 				if ts.generated != 0 || ts.saved != 0 {
 					t.Fatal("Invalid session continued refresh")
 				}
@@ -292,11 +297,6 @@ func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
 		if stage == "success" && ts.id != 42 {
 			t.Fatal("Wrong revoked user")
 		}
-	}
-	r := &usersFake{user: User{ID: 42}}
-	users, err := NewUserService(testLog(), r, &tokensFake{}, &mailFake{}, "").GetAllUsers(context.Background())
-	if err != nil || len(users) != 1 {
-		t.Fatal("Internal user query failed")
 	}
 }
 
@@ -327,7 +327,7 @@ func TestJWTSignatureExpiryAndSecrets(t *testing.T) {
 		validate func(string) (*TokenClaims, error)
 		subject  string
 		ttl      time.Duration
-	}{{pair.AccesToken, s.ValidateAccessToken, "access", time.Minute}, {pair.RefreshToken, s.ValidateRefreshToken, "refresh", time.Hour}} {
+	}{{pair.AccessToken, s.ValidateAccessToken, "access", time.Minute}, {pair.RefreshToken, s.ValidateRefreshToken, "refresh", time.Hour}} {
 		claims, err := tc.validate(tc.token)
 		if err != nil || claims.UserID != 42 || claims.Subject != tc.subject || claims.ExpiresAt.Sub(claims.IssuedAt.Time) != tc.ttl {
 			t.Fatalf("Wrong JWT claims: %v", err)

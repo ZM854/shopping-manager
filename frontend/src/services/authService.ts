@@ -2,41 +2,44 @@ import type {
   AuthResponse,
   LoginRequest,
   RegistrationRequest,
-} from "../models/auth";
+  RegistrationResponse,
+} from '../models/auth';
 
-import { apiFetch } from "./api";
+import { apiFetch } from './api';
 
 export class AuthService {
   async login(data: LoginRequest): Promise<AuthResponse> {
-    return apiFetch<AuthResponse>("/login", {
-      method: "POST",
+    return apiFetch<AuthResponse>('/login', {
+      method: 'POST',
       body: JSON.stringify(data),
+      skipRefresh: true,
     });
   }
 
-  async register(data: RegistrationRequest): Promise<AuthResponse> {
-    return apiFetch<AuthResponse>("/registration", {
-      method: "POST",
+  async register(data: RegistrationRequest): Promise<RegistrationResponse> {
+    return apiFetch<RegistrationResponse>('/registration', {
+      method: 'POST',
       body: JSON.stringify(data),
+      skipRefresh: true,
     });
   }
 
   async refresh(): Promise<AuthResponse> {
-    return apiFetch<AuthResponse>("/refresh", {
-      method: "POST",
+    return apiFetch<AuthResponse>('/refresh', {
+      method: 'POST',
       skipRefresh: true,
     });
   }
 
   async activate(token: string): Promise<void> {
     return apiFetch<void>(`/activation/${token}`, {
-      method: "GET",
+      method: 'GET',
     });
   }
 
   async logout(): Promise<void> {
-    return apiFetch<void>("/logout", {
-      method: "POST",
+    return apiFetch<void>('/logout', {
+      method: 'POST',
     });
   }
 }

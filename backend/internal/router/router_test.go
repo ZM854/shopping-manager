@@ -43,6 +43,8 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 		{http.MethodDelete, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
 		{http.MethodGet, "/api/products", http.StatusNotFound},
 		{http.MethodGet, "/products", http.StatusNotFound},
+		{http.MethodGet, "/api/users", http.StatusNotFound},
+		{http.MethodGet, "/users", http.StatusNotFound},
 		// Public auth routes must reach validation without requiring a bearer token.
 		{http.MethodPost, "/api/login", http.StatusBadRequest},
 		{http.MethodPost, "/login", http.StatusNotFound},

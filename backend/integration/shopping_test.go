@@ -47,7 +47,7 @@ func newShoppingFixture(t *testing.T) *shoppingFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
-		f.tokens[user] = pair.AccesToken
+		f.tokens[user] = pair.AccessToken
 	}
 	f.router = router.New(log, shopping.NewHandler(f.service, log), auth.NewAuthHandler(log, nil, "http://client.example.test/login"), middleware.NewAuthMiddleware(tokens), "http://client.example.test")
 	return f
