@@ -24,7 +24,6 @@ const response = {
     isEmailVerified: true,
   },
   accessToken: 'test-access',
-  refreshToken: 'test-refresh',
 };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -60,7 +59,7 @@ describe('AuthProvider', () => {
     });
     expect(service.login).toHaveBeenCalledWith(credentials);
     expect(result.current.user).toEqual(response.user);
-    service.register.mockResolvedValue(response);
+    service.register.mockResolvedValue({ activationRequired: true });
     const data = { ...credentials, name: 'Имя' };
     await act(async () => {
       await result.current.register(data);
@@ -78,4 +77,25 @@ describe('AuthProvider', () => {
   it('useAuth требует провайдера', () => {
     expect(() => renderHook(useAuth)).toThrow('useAuth');
   });
+
+  it.each(['login', 'register', 'refresh'] as const)(
+    'пробрасывает ошибку %s вызывающей форме',
+    async (operation) => {
+      service.refresh.mockRejectedValue(new Error('no session'));
+      const { result } = renderHook(useAuth, { wrapper: AuthProvider });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const error = new Error('Отказ сервера');
+      service[operation].mockRejectedValue(error);
+      const data = {
+        name: 'Имя',
+        email: 'user@example.test',
+        password: 'password123',
+      };
+      await act(async () => {
+        await expect(result.current[operation](data)).rejects.toBe(error);
+      });
+      expect(result.current.user).toBeNull();
+      expect(getAccessToken()).toBeNull();
+    },
+  );
 });

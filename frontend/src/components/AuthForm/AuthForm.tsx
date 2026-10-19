@@ -1,10 +1,10 @@
-import { Link } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import type { LoginRequest, RegistrationRequest } from "../../models/auth";
-import type { AuthFormData, AuthFormProps } from "./AuthForm.types";
-import Button from "../UI/button/Button/Button";
-import cls from "./AuthForm.module.css";
-import TextField from "../UI/input/TextField/TextField";
+import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import type { LoginRequest, RegistrationRequest } from '../../models/auth';
+import type { AuthFormData, AuthFormProps } from './AuthForm.types';
+import Button from '../UI/button/Button/Button';
+import cls from './AuthForm.module.css';
+import TextField from '../UI/input/TextField/TextField';
 
 export default function AuthForm({
   mode,
@@ -18,20 +18,20 @@ export default function AuthForm({
     formState: { errors, isSubmitting },
   } = useForm<AuthFormData>();
 
-  const isLogin = mode === "login";
+  const isLogin = mode === 'login';
 
   const handleFormSubmit = (data: AuthFormData) => {
     if (isLogin) {
-      onSubmit(data as LoginRequest);
+      return onSubmit(data as LoginRequest);
     } else {
-      onSubmit(data as RegistrationRequest);
+      return onSubmit(data as RegistrationRequest);
     }
   };
 
   return (
     <div className={cls.container}>
       <div className={cls.card}>
-        <h1 className={cls.title}>{isLogin ? "Вход" : "Регистрация"}</h1>
+        <h1 className={cls.title}>{isLogin ? 'Вход' : 'Регистрация'}</h1>
 
         <form className={cls.form} onSubmit={handleSubmit(handleFormSubmit)}>
           {!isLogin && (
@@ -40,17 +40,17 @@ export default function AuthForm({
               type="text"
               autoComplete="given-name"
               error={errors.name?.message}
-              {...register("name", {
-                required: "Введите имя",
+              {...register('name', {
+                required: 'Введите имя',
 
                 minLength: {
                   value: 2,
-                  message: "Минимум 2 символа",
+                  message: 'Минимум 2 символа',
                 },
 
                 maxLength: {
                   value: 20,
-                  message: "Максимум 20 символов",
+                  message: 'Максимум 20 символов',
                 },
               })}
             />
@@ -60,36 +60,40 @@ export default function AuthForm({
             type="email"
             autoComplete="email"
             error={errors.email?.message}
-            {...register("email", {
-              required: "Введите email",
+            {...register('email', {
+              required: 'Введите email',
               pattern: {
                 value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                message: "Некорректный email",
+                message: 'Некорректный email',
               },
             })}
           />
           <TextField
             label="Пароль"
             type="password"
-            autoComplete={isLogin ? "current-password" : "new-password"}
+            autoComplete={isLogin ? 'current-password' : 'new-password'}
             error={errors.password?.message}
-            {...register("password", {
-              required: "Введите пароль",
+            {...register('password', {
+              required: 'Введите пароль',
 
               minLength: {
                 value: 6,
-                message: "Минимум 6 символов",
+                message: 'Минимум 6 символов',
               },
 
               maxLength: {
                 value: 72,
-                message: "Максимум 72 символа",
+                message: 'Максимум 72 символа',
               },
             })}
           />
-          {error && <p role="alert" className={cls.serverError}>{error}</p>}
+          {error && (
+            <p role="alert" className={cls.serverError}>
+              {error}
+            </p>
+          )}
           <Button type="submit" disabled={loading || isSubmitting}>
-            {isLogin ? "Войти" : "Зарегистрироваться"}
+            {isLogin ? 'Войти' : 'Зарегистрироваться'}
           </Button>
         </form>
 

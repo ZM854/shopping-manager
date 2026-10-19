@@ -49,6 +49,7 @@ services:
       JWT_REFRESH_SECRET: ${E2E_JWT_REFRESH_SECRET:?Run node scripts/e2e-env.mjs}
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 24h
+      ACTIVATION_RESEND_INTERVAL: 2s
       PUBLIC_API_URL: http://127.0.0.1:55173/api
       FRONTEND_URL: http://127.0.0.1:55173
       SMTP_HOST: mailpit

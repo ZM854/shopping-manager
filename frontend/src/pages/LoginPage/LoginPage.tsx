@@ -1,9 +1,10 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../hooks/useAuth";
-import AuthForm from "../../components/AuthForm/AuthForm";
-import { useState } from "react";
-import type { LoginRequest } from "../../models/auth";
-import cls from "./LoginPage.module.css";
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import AuthForm from '../../components/AuthForm/AuthForm';
+import { useState } from 'react';
+import type { LoginRequest } from '../../models/auth';
+import cls from './LoginPage.module.css';
+import ActivationResendForm from '../../components/ActivationResendForm/ActivationResendForm';
 
 const LoginPage = () => {
   const { login } = useAuth();
@@ -22,7 +23,7 @@ const LoginPage = () => {
       setError(null);
       await login(data);
 
-      const from = location.state?.from?.pathname ?? "/";
+      const from = location.state?.from?.pathname ?? '/';
 
       navigate(from, {
         replace: true,
@@ -31,7 +32,7 @@ const LoginPage = () => {
       if (error instanceof Error) {
         setError(error.message);
       } else {
-        setError("Не удалось выполнить вход");
+        setError('Не удалось выполнить вход');
       }
     }
   };
@@ -44,6 +45,10 @@ const LoginPage = () => {
         </div>
       )}
       <AuthForm mode="login" error={error} onSubmit={handleSubmit} />
+      {location.state?.activated && (
+        <p role="status">Почта подтверждена. Войдите в аккаунт.</p>
+      )}
+      <ActivationResendForm key={email ?? ''} initialEmail={email} />
     </div>
   );
 };

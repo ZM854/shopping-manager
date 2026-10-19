@@ -22,7 +22,7 @@ export const router = createBrowserRouter([
     element: <RegistrationPage />,
   },
   {
-    path: '/activation/:token',
+    path: '/activation/:token?',
     element: <ActivationPage />,
   },
   {

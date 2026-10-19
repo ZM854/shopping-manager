@@ -25,6 +25,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       logger.debug(TAG, 'login successful', { email: data.email });
     } catch (error) {
       logger.error(TAG, 'failed to login', error);
+      throw error;
     }
   };
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       logger.debug(TAG, 'registration successful', { email: data.email });
     } catch (error) {
       logger.error(TAG, 'failed to register', error);
+      throw error;
     }
   };
 
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       logger.debug(TAG, 'refresh successful');
     } catch (error) {
       logger.error(TAG, 'failed to refresh', error);
+      throw error;
     }
   };
 

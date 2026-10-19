@@ -10,6 +10,93 @@ import type { ShoppingItem, ShoppingList } from '../src/models/shoppingList';
 const appOrigin = 'http://127.0.0.1:55173';
 const mailOrigin = 'http://127.0.0.1:58025';
 
+async function activationPathFor(request: APIRequestContext, email: string) {
+  let messageId = '';
+  await expect
+    .poll(async () => {
+      const response = await request.get(`${mailOrigin}/api/v1/messages`);
+      const inbox: { messages: { ID: string; To: { Address: string }[] }[] } =
+        await response.json();
+      messageId =
+        inbox.messages.find((message) =>
+          message.To.some((to) => to.Address === email),
+        )?.ID ?? '';
+      return messageId;
+    })
+    .not.toBe('');
+  const response = await request.get(
+    `${mailOrigin}/api/v1/message/${messageId}`,
+  );
+  const content: { Text: string; HTML: string } = await response.json();
+  const path = `${content.Text}\n${content.HTML}`.match(
+    /\/activation\/[A-Za-z0-9_-]+/,
+  )?.[0];
+  if (!path) throw new Error('В тестовом письме нет ссылки подтверждения');
+  return path;
+}
+
+test('повторное письмо заменяет ссылку; подтверждение требует кнопки и одноразово', async ({
+  page,
+  request,
+}) => {
+  const email = `resend-${randomUUID()}@example.test`;
+  const registration = await request.post(`${appOrigin}/api/registration`, {
+    data: { name: 'Проверка', email, password: `test-${randomUUID()}` },
+  });
+  expect(registration.status()).toBe(201);
+  const originalPath = await activationPathFor(request, email);
+  await page.goto('/login');
+  const resendForm = page.getByRole('form', { name: 'Повторное письмо' });
+  await resendForm.getByLabel('Почта для подтверждения').fill(email);
+  await expect
+    .poll(
+      async () => {
+        const response = page.waitForResponse((response) =>
+          response.url().endsWith('/api/activation/resend'),
+        );
+        await resendForm
+          .getByRole('button', { name: 'Отправить письмо повторно' })
+          .click();
+        return (await response).status();
+      },
+      { timeout: 10000 },
+    )
+    .toBe(202);
+  const newPath = await activationPathFor(request, email);
+  expect(newPath).not.toBe(originalPath);
+  for (const [path, status] of [
+    [originalPath, 400],
+    [newPath, 204],
+    [newPath, 400],
+  ] as const) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/activation$/);
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === 'refreshToken',
+      ),
+    ).toBe(false);
+    const response = page.waitForResponse((response) =>
+      response.url().endsWith('/api/activation'),
+    );
+    await page
+      .getByRole('button', { name: 'Подтвердить почту', exact: true })
+      .click();
+    expect((await response).status()).toBe(status);
+    if (status === 204)
+      await expect(page.getByRole('status')).toContainText(
+        'Почта подтверждена',
+      );
+    else
+      await expect(page.getByRole('alert')).toContainText(
+        'Ссылка недействительна',
+      );
+  }
+  expect(
+    (await request.get(`${appOrigin}/api/activate/removed-route`)).status(),
+  ).toBe(404);
+});
+
 async function registerAndLogin(page: Page, request: APIRequestContext) {
   const suffix = randomUUID();
   const email = `e2e-${suffix}@example.test`;
@@ -26,7 +113,26 @@ async function registerAndLogin(page: Page, request: APIRequestContext) {
   await page
     .getByRole('button', { name: 'Зарегистрироваться', exact: true })
     .click();
-  expect((await registration).status()).toBe(201);
+  const registered = await registration;
+  expect(registered.status()).toBe(201);
+  expect(await registered.json()).toEqual({ activationRequired: true });
+  expect(
+    (await page.context().cookies()).some(
+      (cookie) => cookie.name === 'refreshToken',
+    ),
+  ).toBe(false);
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Пароль').fill(password);
+  const inactiveLogin = page.waitForResponse((response) =>
+    response.url().endsWith('/api/login'),
+  );
+  await page.getByRole('button', { name: 'Войти', exact: true }).click();
+  expect((await inactiveLogin).status()).toBe(403);
+  await expect(page.getByRole('alert')).toHaveText(
+    'Подтвердите email перед входом',
+  );
   await expect(page).toHaveURL(/\/login$/);
 
   // Mailpit принадлежит только E2E Compose, письма не отправляются наружу.
@@ -49,13 +155,32 @@ async function registerAndLogin(page: Page, request: APIRequestContext) {
   );
   const content: { Text: string; HTML: string } = await message.json();
   const activationPath = `${content.Text}\n${content.HTML}`.match(
-    /\/api\/activate\/[A-Za-z0-9_-]+/,
+    /\/activation\/[A-Za-z0-9_-]+/,
   )?.[0];
   expect(activationPath).toBeDefined();
-  const activated = await request.get(`${appOrigin}${activationPath}`, {
-    maxRedirects: 0,
-  });
-  expect(activated.status()).toBe(302);
+  await page.goto(`${appOrigin}${activationPath}`);
+  await expect(page).toHaveURL(/\/activation$/);
+  const activation = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/activation') &&
+      response.request().method() === 'POST',
+  );
+  await page
+    .getByRole('button', { name: 'Подтвердить почту', exact: true })
+    .click();
+  expect((await activation).status()).toBe(204);
+  await expect(page.getByRole('status')).toContainText('Почта подтверждена');
+  await page.getByRole('link', { name: 'Перейти ко входу' }).click();
+  await page.getByLabel('Email', { exact: true }).fill(email);
+
+  await page.getByLabel('Пароль').fill('incorrect-test-password');
+  const rejectedLogin = page.waitForResponse((response) =>
+    response.url().endsWith('/api/login'),
+  );
+  await page.getByRole('button', { name: 'Войти', exact: true }).click();
+  expect((await rejectedLogin).status()).toBe(401);
+  await expect(page.getByRole('alert')).toHaveText('Неверный email или пароль');
+  await expect(page).toHaveURL(/\/login$/);
 
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Пароль').fill(password);
@@ -67,7 +192,9 @@ async function registerAndLogin(page: Page, request: APIRequestContext) {
   await page.getByRole('button', { name: 'Войти', exact: true }).click();
   const response = await login;
   expect(response.status()).toBe(200);
+  expect(response.headers()['cache-control']).toBe('no-store');
   const session: { accessToken: string } = await response.json();
+  expect(Object.keys(session).sort()).toEqual(['accessToken', 'user']);
   await expect(page).toHaveURL(/\/lists$/);
   await expect(page.getByText('У вас пока нет списков покупок.')).toBeVisible();
   return session.accessToken;

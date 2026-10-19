@@ -1,0 +1,21 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.form h2 {
+  font-size: var(--fs-body);
+}
+.form p {
+  color: var(--text-secondary);
+}
+.form .error {
+  color: var(--error);
+}

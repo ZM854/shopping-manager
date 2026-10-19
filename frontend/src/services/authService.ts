@@ -32,8 +32,18 @@ export class AuthService {
   }
 
   async activate(token: string): Promise<void> {
-    return apiFetch<void>(`/activation/${token}`, {
-      method: 'GET',
+    return apiFetch<void>('/activation', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+      skipRefresh: true,
+    });
+  }
+
+  async resendActivation(email: string): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>('/activation/resend', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+      skipRefresh: true,
     });
   }
 

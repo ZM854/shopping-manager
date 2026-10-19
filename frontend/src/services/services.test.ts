@@ -51,7 +51,11 @@ describe('Сервисы текущего API', () => {
     {
       run: () => authService.login(login),
       path: '/login',
-      options: { method: 'POST', body: JSON.stringify(login) },
+      options: {
+        method: 'POST',
+        body: JSON.stringify(login),
+        skipRefresh: true,
+      },
     },
     {
       run: () => authService.register({ ...login, name: 'Имя' }),
@@ -59,12 +63,31 @@ describe('Сервисы текущего API', () => {
       options: {
         method: 'POST',
         body: JSON.stringify({ ...login, name: 'Имя' }),
+        skipRefresh: true,
       },
     },
     {
       run: () => authService.refresh(),
       path: '/refresh',
       options: { method: 'POST', skipRefresh: true },
+    },
+    {
+      run: () => authService.activate('test-token'),
+      path: '/activation',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ token: 'test-token' }),
+        skipRefresh: true,
+      },
+    },
+    {
+      run: () => authService.resendActivation(login.email),
+      path: '/activation/resend',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ email: login.email }),
+        skipRefresh: true,
+      },
     },
     {
       run: () => authService.logout(),

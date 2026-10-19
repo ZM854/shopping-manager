@@ -1,4 +1,4 @@
-import type { User } from "./user";
+import type { User } from './user';
 
 export interface LoginRequest {
   email: string;
@@ -14,5 +14,8 @@ export interface RegistrationRequest {
 export interface AuthResponse {
   user: User;
   accessToken: string;
-  refreshToken: string;
+}
+
+export interface RegistrationResponse {
+  activationRequired: true;
 }
