@@ -20,6 +20,7 @@ func configTestEnv(t *testing.T) {
 		t.Setenv(key, "")
 	}
 	t.Setenv("SERVER_PORT", ":8080")
+	t.Setenv("APP_ENV", "dev")
 	t.Setenv("JWT_ACCESS_SECRET", strings.Repeat("a", 32))
 	t.Setenv("JWT_REFRESH_SECRET", strings.Repeat("r", 32))
 }
@@ -35,7 +36,7 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		cfg.JWTAccessTTL != 15*time.Minute || cfg.JWTRefreshTTL != 30*24*time.Hour ||
 		cfg.ActivationTTL != 24*time.Hour || cfg.ActivationResendInterval != time.Minute ||
 		cfg.ActivationMailTimeout != 10*time.Second ||
-		!cfg.SMTPAuthEnabled || !cfg.SMTPTLSRequired {
+		!cfg.SMTPAuthEnabled || !cfg.SMTPTLSRequired || cfg.CookieSecure {
 		t.Fatal("Incorrect defaults")
 	}
 	for key, value := range map[string]string{
@@ -54,7 +55,7 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.AppENV != "test" || cfg.PublicAPIURL != "https://example.test/api" ||
+	if cfg.AppENV != "test" || !cfg.CookieSecure || cfg.PublicAPIURL != "https://example.test/api" ||
 		cfg.FrontendURL != "https://example.test" || cfg.JWTAccessTTL != 2*time.Minute ||
 		cfg.JWTRefreshTTL != 24*time.Hour || cfg.SMTPAuthEnabled || cfg.SMTPTLSRequired ||
 		cfg.ActivationTTL != 2*time.Hour || cfg.ActivationResendInterval != 30*time.Second ||

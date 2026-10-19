@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +27,7 @@ func (f *authFake) response() (AuthResult, error) {
 	f.calls++
 	return AuthResult{
 		User:   UserDTO{ID: 42, Name: "Имя", IsEmailVerified: true},
-		Tokens: TokenPair{AccessToken: "test-access", RefreshToken: "test-refresh"},
+		Tokens: TokenPair{AccessToken: "test-access", RefreshToken: "test-refresh", RefreshExpiresAt: time.Now().Add(time.Hour)},
 	}, f.err
 }
 func (f *authFake) Registration(ctx context.Context, name, email, password string) (RegistrationResponse, error) {
@@ -96,13 +97,16 @@ func TestAuthHTTPResponses(t *testing.T) {
 						want = op.businessStatus
 					case "missing_cookie":
 						want = 401
+						if op.path == "/logout" {
+							want = 200
+						}
 					case "invalid_body":
 						want = 400
 					case "inactive":
 						f.err = ErrUserNotActivated
 						want = 403
 					}
-					h := NewAuthHandler(testLog(), f)
+					h := NewAuthHandler(testLog(), f, false)
 					r := gin.New()
 					r.Handle(op.method, op.path, op.fn(h))
 					body := `{"name":"Имя","email":"user@example.test","password":"password123"}`
@@ -125,6 +129,9 @@ func TestAuthHTTPResponses(t *testing.T) {
 						t.Fatal("Auth responses must not be cached")
 					}
 					if want >= 400 {
+						if w.Header().Get("Set-Cookie") != "" {
+							t.Fatal("Rejected request must not overwrite a newer cookie")
+						}
 						var body map[string]any
 						if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil ||
 							body["code"] == nil || body["message"] == nil || len(body) != 2 {
@@ -181,11 +188,40 @@ func TestAuthHTTPResponses(t *testing.T) {
 	}
 }
 
+func TestSessionCookieAttributesAndRemainingLifetime(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		h := NewAuthHandler(testLog(), nil, secure)
+		expires := time.Now().Add(125 * time.Second).Truncate(time.Second)
+		var cookies []*http.Cookie
+		for _, clear := range []bool{false, true} {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			if clear {
+				h.clearRefreshCookie(c)
+			} else {
+				h.setRefreshCookie(c, "secret", expires)
+			}
+			if len(w.Result().Cookies()) != 1 {
+				t.Fatal("Missing cookie")
+			}
+			cookies = append(cookies, w.Result().Cookies()[0])
+		}
+		for _, cookie := range cookies {
+			if cookie.Secure != secure || !cookie.HttpOnly || cookie.Domain != "" || cookie.Path != "/" || cookie.SameSite != http.SameSiteLaxMode {
+				t.Fatal("Issue and clear must use the same explicit cookie policy")
+			}
+		}
+		if cookies[0].MaxAge < 123 || cookies[0].MaxAge > 125 || !cookies[0].Expires.Equal(expires) || cookies[1].MaxAge != -1 {
+			t.Fatal("Cookie lifetime must follow the remaining session expiry")
+		}
+	}
+}
+
 func TestActivationErrorDoesNotLogToken(t *testing.T) {
 	const token = testActivationToken
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
-	h := NewAuthHandler(log, &authFake{err: fmt.Errorf("dependency failed for %s", token)})
+	h := NewAuthHandler(log, &authFake{err: fmt.Errorf("dependency failed for %s", token)}, false)
 	r := gin.New()
 	r.POST("/activation", h.Activate)
 	w := httptest.NewRecorder()
@@ -200,7 +236,7 @@ func TestActivationDeliveryAndPayloadFailures(t *testing.T) {
 	for _, path := range []string{"/registration", "/activation/resend"} {
 		t.Run(path, func(t *testing.T) {
 			fake := &authFake{err: ErrActivationDelivery}
-			handler := NewAuthHandler(testLog(), fake)
+			handler := NewAuthHandler(testLog(), fake, false)
 			router := gin.New()
 			if path == "/registration" {
 				router.POST(path, handler.Registration)
@@ -216,7 +252,7 @@ func TestActivationDeliveryAndPayloadFailures(t *testing.T) {
 	}
 	for _, path := range []string{"/activation", "/activation/resend"} {
 		fake := &authFake{}
-		handler := NewAuthHandler(testLog(), fake)
+		handler := NewAuthHandler(testLog(), fake, false)
 		router := gin.New()
 		if path == "/activation" {
 			router.POST(path, handler.Activate)

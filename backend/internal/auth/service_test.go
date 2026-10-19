@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -77,39 +74,30 @@ func (f *usersFake) SaveActivation(ctx context.Context, id int64, state Activati
 }
 
 type tokensFake struct {
-	generateErr, saveErr, validateErr, findErr, removeErr error
-	generated, saved, removed                             int
-	id                                                    int64
-	token                                                 string
-	ctx                                                   context.Context
+	generateErr, saveErr, refreshErr, removeErr error
+	generated, saved, removed                   int
+	id                                          int64
+	token                                       string
+	ctx                                         context.Context
 }
 
-func (f *tokensFake) GenerateTokens(id int64) (TokenPair, error) {
+func (f *tokensFake) CreateSession(ctx context.Context, id int64) (TokenPair, error) {
 	f.generated++
-	f.id = id
-	return TokenPair{AccessToken: "test-access", RefreshToken: "test-refresh"}, f.generateErr
-}
-func (f *tokensFake) SaveToken(ctx context.Context, id int64, s string) error {
+	f.id, f.ctx = id, ctx
+	if f.generateErr != nil {
+		return TokenPair{}, f.generateErr
+	}
 	f.saved++
-	f.ctx = ctx
-	f.id = id
-	f.token = s
-	return f.saveErr
+	f.token = "test-refresh"
+	return TokenPair{AccessToken: "test-access", RefreshToken: f.token}, f.saveErr
 }
-func (f *tokensFake) ValidateRefreshToken(s string) (*TokenClaims, error) {
-	f.token = s
-	return &TokenClaims{UserID: 42}, f.validateErr
+func (f *tokensFake) RefreshSession(ctx context.Context, raw string) (AuthResult, error) {
+	f.ctx, f.token = ctx, raw
+	return AuthResult{User: UserDTO{ID: 42}}, f.refreshErr
 }
-func (f *tokensFake) FindToken(ctx context.Context, id int64, s string) (*RefreshToken, error) {
-	f.ctx = ctx
-	f.id = id
-	f.token = s
-	return &RefreshToken{UserID: id}, f.findErr
-}
-func (f *tokensFake) RemoveToken(ctx context.Context, id int64) error {
+func (f *tokensFake) RevokeSession(ctx context.Context, raw string) error {
+	f.ctx, f.token = ctx, raw
 	f.removed++
-	f.ctx = ctx
-	f.id = id
 	return f.removeErr
 }
 
@@ -302,160 +290,18 @@ func TestResendActivationAndFailures(t *testing.T) {
 	}
 }
 
-func TestRefreshAndLogoutDependencyErrors(t *testing.T) {
-	problem := errors.New("dependency failed")
-	for _, stage := range []string{"success", "validate", "find", "user", "inactive", "revoke", "already_revoked", "generate", "save"} {
-		t.Run(stage, func(t *testing.T) {
-			r := &usersFake{user: User{ID: 42, IsEmailVerified: true}}
-			ts := &tokensFake{}
-			var want error
-			switch stage {
-			case "validate":
-				ts.validateErr = problem
-				want = problem
-			case "find":
-				ts.findErr = problem
-				want = problem
-			case "user":
-				r.err = problem
-				want = problem
-			case "inactive", "revoke", "already_revoked":
-				r.user.IsEmailVerified = false
-				want = ErrUserNotActivated
-				if stage == "revoke" {
-					ts.removeErr = problem
-					want = problem
-				}
-				if stage == "already_revoked" {
-					ts.removeErr = ErrRefreshTokenNotFound
-				}
-			case "generate":
-				ts.generateErr = problem
-				want = problem
-			case "save":
-				ts.saveErr = problem
-				want = problem
-			}
-			resp, err := newTestUserService(testLog(), r, ts, &mailFake{}, "").Refresh(context.Background(), "old-refresh")
-			if !errors.Is(err, want) {
-				t.Fatalf("error=%v want %v", err, want)
-			}
-			if stage == "success" && (resp.User.ID != 42 || ts.saved != 1 || ts.token != "test-refresh") {
-				t.Fatal("Refresh did not persist replacement")
-			}
-			if stage == "inactive" || stage == "revoke" || stage == "already_revoked" {
-				if ts.removed != 1 || ts.id != 42 {
-					t.Fatal("Inactive user's legacy refresh must be revoked")
-				}
-			}
-			if stage != "success" && stage != "generate" && stage != "save" {
-				if ts.generated != 0 || ts.saved != 0 {
-					t.Fatal("Invalid session continued refresh")
-				}
-			}
-		})
-	}
-	for _, stage := range []string{"success", "validate", "remove"} {
-		ts := &tokensFake{}
-		var want error
-		if stage == "validate" {
-			ts.validateErr = problem
-			want = problem
-		}
-		if stage == "remove" {
-			ts.removeErr = problem
-			want = problem
-		}
-		err := newTestUserService(testLog(), &usersFake{}, ts, &mailFake{}, "").Logout(context.Background(), "refresh")
-		if !errors.Is(err, want) {
-			t.Fatal("Logout lost error")
-		}
-		if stage == "success" && ts.id != 42 {
-			t.Fatal("Wrong revoked user")
-		}
-	}
-}
-
-type tokenRepoFake struct {
-	token RefreshToken
-	err   error
-	id    int64
-	hash  string
-}
-
-func (f *tokenRepoFake) Save(_ context.Context, id int64, hash string) error {
-	f.id, f.hash = id, hash
-	return f.err
-}
-func (f *tokenRepoFake) FindByUserId(_ context.Context, id int64) (RefreshToken, error) {
-	f.id = id
-	return f.token, f.err
-}
-func (f *tokenRepoFake) DeleteByUserId(_ context.Context, id int64) error { f.id = id; return f.err }
-func TestJWTSignatureExpiryAndSecrets(t *testing.T) {
-	s := NewTokenService(testLog(), &tokenRepoFake{}, "test-access-secret", "test-refresh-secret", time.Minute, time.Hour)
-	pair, err := s.GenerateTokens(42)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		token    string
-		validate func(string) (*TokenClaims, error)
-		subject  string
-		ttl      time.Duration
-	}{{pair.AccessToken, s.ValidateAccessToken, "access", time.Minute}, {pair.RefreshToken, s.ValidateRefreshToken, "refresh", time.Hour}} {
-		claims, err := tc.validate(tc.token)
-		if err != nil || claims.UserID != 42 || claims.Subject != tc.subject || claims.ExpiresAt.Sub(claims.IssuedAt.Time) != tc.ttl {
-			t.Fatalf("Wrong JWT claims: %v", err)
-		}
-	}
-	for _, token := range []string{"", "malformed", pair.RefreshToken} {
-		if _, err := s.ValidateAccessToken(token); err == nil {
-			t.Fatal("Invalid access token accepted")
-		}
-	}
-	expired, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, TokenClaims{UserID: 42, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour))}}).SignedString([]byte("test-access-secret"))
-	if _, err := s.ValidateAccessToken(expired); !errors.Is(err, jwt.ErrTokenExpired) {
-		t.Fatal("Expired token accepted")
-	}
-	unsigned, _ := jwt.NewWithClaims(jwt.SigningMethodNone, TokenClaims{UserID: 42}).SignedString(jwt.UnsafeAllowNoneSignatureType)
-	if _, err := s.ValidateAccessToken(unsigned); err == nil {
-		t.Fatal("Unsigned token accepted")
-	}
-}
-func TestTokenStorageUsesHashAndRejectsMismatch(t *testing.T) {
-	repo := &tokenRepoFake{}
-	s := NewTokenService(testLog(), repo, "a", "r", time.Minute, time.Hour)
-	ctx := context.Background()
-	if err := s.SaveToken(ctx, 42, "refresh-secret"); err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256([]byte("refresh-secret"))
-	want := hex.EncodeToString(sum[:])
-	if repo.id != 42 || repo.hash != want {
-		t.Fatal("Token must be stored hashed")
-	}
-	repo.token = RefreshToken{UserID: 42, TokenHash: want}
-	token, err := s.FindToken(ctx, 42, "refresh-secret")
-	if err != nil || token.UserID != 42 {
-		t.Fatal("Stored token not found")
-	}
-	if _, err := s.FindToken(ctx, 42, "different"); !errors.Is(err, ErrInvalidToken) {
-		t.Fatal("Mismatch accepted")
-	}
+func TestUserServiceDelegatesSessionOperations(t *testing.T) {
 	problem := errors.New("storage failed")
-	repo.err = problem
-	if err := s.SaveToken(ctx, 42, "x"); !errors.Is(err, problem) {
-		t.Fatal("Save lost error")
-	}
-	if _, err := s.FindToken(ctx, 42, "x"); !errors.Is(err, problem) {
-		t.Fatal("Find lost error")
-	}
-	if err := s.RemoveToken(ctx, 42); !errors.Is(err, problem) {
-		t.Fatal("Delete lost error")
-	}
-	repo.err = nil
-	if err := s.RemoveToken(ctx, 42); err != nil {
-		t.Fatal(err)
+	for _, failure := range []error{nil, problem} {
+		tokens := &tokensFake{refreshErr: failure, removeErr: failure}
+		service := newTestUserService(testLog(), &usersFake{}, tokens, nil, "")
+		ctx := context.Background()
+		result, err := service.Refresh(ctx, "refresh")
+		if !errors.Is(err, failure) || tokens.token != "refresh" || tokens.ctx != ctx || result.User.ID != 42 {
+			t.Fatal("Refresh lost result, error or context")
+		}
+		if err := service.Logout(ctx, "logout"); !errors.Is(err, failure) || tokens.token != "logout" || tokens.ctx != ctx {
+			t.Fatal("Logout lost error or context")
+		}
 	}
 }

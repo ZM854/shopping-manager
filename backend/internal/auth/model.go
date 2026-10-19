@@ -40,14 +40,19 @@ func DefaultActivationOptions() ActivationOptions {
 }
 
 type RefreshToken struct {
-	ID        int64
-	UserID    int64
-	TokenHash string `json:"-"`
+	SessionID  string `json:"-"`
+	UserID     int64
+	TokenHash  string `json:"-"`
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastUsedAt time.Time
 }
 
 type TokenPair struct {
-	AccessToken  string `json:"-"`
-	RefreshToken string `json:"-"`
+	AccessToken      string    `json:"-"`
+	RefreshToken     string    `json:"-"`
+	SessionID        string    `json:"-"`
+	RefreshExpiresAt time.Time `json:"-"`
 }
 
 type UserDTO struct {

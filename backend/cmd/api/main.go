@@ -89,7 +89,7 @@ func main() {
 			MailTimeout:    cfg.ActivationMailTimeout,
 		},
 	)
-	authHandler := auth.NewAuthHandler(log, userService)
+	authHandler := auth.NewAuthHandler(log, userService, cfg.CookieSecure)
 
 	authMiddleware := middleware.NewAuthMiddleware(tokenService)
 

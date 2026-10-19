@@ -10,176 +10,202 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
-var (
-	ErrInvalidToken = errors.New("invalid token")
-)
+var ErrInvalidToken = errors.New("invalid token")
+
+type sessionTransaction interface {
+	Lock(context.Context, int64, string) (RefreshToken, User, error)
+	Rotate(context.Context, RefreshToken, string) error
+}
 
 type tokenStore interface {
-	Save(context.Context, int64, string) error
-	FindByUserId(context.Context, int64) (RefreshToken, error)
-	DeleteByUserId(context.Context, int64) error
+	Create(context.Context, RefreshToken) error
+	Delete(context.Context, int64, string, string) error
+	InSessionTx(context.Context, func(sessionTransaction) error) error
 }
 
 type TokenService struct {
-	log             *slog.Logger
-	tokenRepository tokenStore
-
-	accessSecret  []byte
-	refreshSecret []byte
-
-	accessTTL  time.Duration
-	refreshTTL time.Duration
+	log                         *slog.Logger
+	tokenRepository             tokenStore
+	accessSecret, refreshSecret []byte
+	accessTTL, refreshTTL       time.Duration
+	now                         func() time.Time
 }
 
 type TokenClaims struct {
-	UserID int64 `json:"user_id"`
+	UserID    int64  `json:"user_id"`
+	SessionID string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
 func NewTokenService(
 	log *slog.Logger,
-	tokenRepository tokenStore,
-	accessSecret string,
-	refreshSecret string,
-	accessTTL time.Duration,
-	refreshTTL time.Duration,
+	repo tokenStore,
+	accessSecret, refreshSecret string,
+	accessTTL, refreshTTL time.Duration,
 ) *TokenService {
 	return &TokenService{
-		tokenRepository: tokenRepository,
 		log:             log.With("component", "service", "entity", "refresh_token"),
+		tokenRepository: repo,
 		accessSecret:    []byte(accessSecret),
 		refreshSecret:   []byte(refreshSecret),
 		accessTTL:       accessTTL,
 		refreshTTL:      refreshTTL,
+		now:             time.Now,
 	}
 }
 
-func (s *TokenService) GenerateTokens(userId int64) (TokenPair, error) {
-	if userId <= 0 {
+// GenerateTokens issues a new pair; only CreateSession persists a login.
+func (s *TokenService) GenerateTokens(userID int64) (TokenPair, error) {
+	// PostgreSQL expiry and JWT NumericDate use the same second precision.
+	expiresAt := s.now().Add(s.refreshTTL).Truncate(time.Second)
+	return s.generateTokens(userID, uuid.NewString(), expiresAt)
+}
+
+func (s *TokenService) generateTokens(userID int64, sessionID string, expiresAt time.Time) (TokenPair, error) {
+	now := s.now()
+	if userID <= 0 || !expiresAt.After(now) {
 		return TokenPair{}, ErrInvalidToken
 	}
-	now := time.Now()
-
+	accessExpiresAt := now.Add(s.accessTTL)
+	if expiresAt.Before(accessExpiresAt) {
+		accessExpiresAt = expiresAt
+	}
 	accessClaims := TokenClaims{
-		UserID: userId,
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "access",
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
+			ExpiresAt: jwt.NewNumericDate(accessExpiresAt),
 		},
 	}
-
 	refreshClaims := TokenClaims{
-		UserID: userId,
+		UserID:    userID,
+		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "refresh",
+			ID:        uuid.NewString(),
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 	}
-
-	accessToken, err := jwt.
-		NewWithClaims(jwt.SigningMethodHS256, accessClaims).
-		SignedString(s.accessSecret)
-
+	access, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(s.accessSecret)
 	if err != nil {
-		s.log.Error("failed to generate access token", "user_id", userId, "error", err)
 		return TokenPair{}, err
 	}
-
-	refreshToken, err := jwt.
-		NewWithClaims(jwt.SigningMethodHS256, refreshClaims).
-		SignedString(s.refreshSecret)
-
+	refresh, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(s.refreshSecret)
 	if err != nil {
-		s.log.Error("failed to generate refresh token", "user_id", userId, "error", err)
 		return TokenPair{}, err
 	}
-
-	s.log.Debug("tokens generated", "user_id", userId)
 	return TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:      access,
+		RefreshToken:     refresh,
+		SessionID:        sessionID,
+		RefreshExpiresAt: expiresAt,
 	}, nil
 }
 
-func (s *TokenService) ValidateAccessToken(tokenString string) (*TokenClaims, error) {
-	return s.validateToken(tokenString, s.accessSecret, "access")
+func (s *TokenService) ValidateAccessToken(token string) (*TokenClaims, error) {
+	return s.validateToken(token, s.accessSecret, "access")
 }
 
-func (s *TokenService) ValidateRefreshToken(tokenString string) (*TokenClaims, error) {
-	return s.validateToken(tokenString, s.refreshSecret, "refresh")
+func (s *TokenService) ValidateRefreshToken(token string) (*TokenClaims, error) {
+	return s.validateToken(token, s.refreshSecret, "refresh")
 }
 
-func (s *TokenService) validateToken(tokenString string, secret []byte, subject string) (*TokenClaims, error) {
+func (s *TokenService) validateToken(raw string, secret []byte, subject string) (*TokenClaims, error) {
 	claims := &TokenClaims{}
-
 	token, err := jwt.ParseWithClaims(
-		tokenString,
-		claims,
-		func(_ *jwt.Token) (any, error) {
-			return secret, nil
-		},
+		raw, claims,
+		func(_ *jwt.Token) (any, error) { return secret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 		jwt.WithExpirationRequired(),
 		jwt.WithSubject(subject),
+		jwt.WithIssuedAt(),
+		jwt.WithTimeFunc(s.now),
 	)
-
 	if err != nil {
-		s.log.Debug("token validation failed", "error", err)
 		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
-
-	if !token.Valid || claims.UserID <= 0 {
+	if !token.Valid || claims.UserID <= 0 || claims.IssuedAt == nil ||
+		!claims.ExpiresAt.After(claims.IssuedAt.Time) {
 		return nil, ErrInvalidToken
 	}
-
+	if subject == "refresh" && (!validSessionUUID(claims.SessionID) || !validSessionUUID(claims.ID)) {
+		return nil, ErrInvalidToken
+	}
 	return claims, nil
 }
 
-func (s *TokenService) SaveToken(ctx context.Context, userId int64, refreshToken string) error {
-	sum := sha256.Sum256([]byte(refreshToken))
-	hash := hex.EncodeToString(sum[:])
-
-	if err := s.tokenRepository.Save(ctx, userId, string(hash)); err != nil {
-		s.log.Error("failed to save refresh token", "user_id", userId, "error", err)
-		return err
-	}
-
-	s.log.Debug("refresh token saved", "user_id", userId)
-
-	return nil
+func validSessionUUID(value string) bool {
+	id, err := uuid.Parse(value)
+	return err == nil && id.Version() == 4 && id.Variant() == uuid.RFC4122 && id.String() == value
 }
 
-func (s *TokenService) RemoveToken(ctx context.Context, userId int64) error {
-	if err := s.tokenRepository.DeleteByUserId(ctx, userId); err != nil {
-		s.log.Error("failed to remove refresh token", "user_id", userId, "error", err)
-		return err
-	}
-
-	s.log.Debug("refresh token removed", "user_id", userId)
-
-	return nil
+func refreshHash(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
 }
 
-func (s *TokenService) FindToken(ctx context.Context, userId int64, refreshToken string) (*RefreshToken, error) {
-	token, err := s.tokenRepository.FindByUserId(ctx, userId)
-
+func (s *TokenService) CreateSession(ctx context.Context, userID int64) (TokenPair, error) {
+	pair, err := s.GenerateTokens(userID)
 	if err != nil {
-		s.log.Error("failed to find refresh token", "user_id", userId, "error", err)
-		return nil, err
+		return TokenPair{}, err
 	}
-
-	sum := sha256.Sum256([]byte(refreshToken))
-	hash := hex.EncodeToString(sum[:])
-
-	if hash != token.TokenHash {
-		return nil, ErrInvalidToken
+	err = s.tokenRepository.Create(ctx, RefreshToken{
+		UserID: userID, SessionID: pair.SessionID,
+		TokenHash: refreshHash(pair.RefreshToken), ExpiresAt: pair.RefreshExpiresAt,
+	})
+	if err != nil {
+		return TokenPair{}, err
 	}
+	s.log.Debug("refresh session created", "user_id", userID)
+	return pair, nil
+}
 
-	s.log.Debug("refresh token verified", "user_id", userId)
+func (s *TokenService) RefreshSession(ctx context.Context, raw string) (AuthResult, error) {
+	claims, err := s.ValidateRefreshToken(raw)
+	if err != nil {
+		return AuthResult{}, err
+	}
+	var result AuthResult
+	err = s.tokenRepository.InSessionTx(ctx, func(tx sessionTransaction) error {
+		session, user, err := tx.Lock(ctx, claims.UserID, claims.SessionID)
+		if err != nil {
+			return err
+		}
+		if session.TokenHash != refreshHash(raw) || !session.ExpiresAt.Equal(claims.ExpiresAt.Time) {
+			return ErrInvalidToken
+		}
+		if !user.IsEmailVerified {
+			return ErrUserNotActivated
+		}
+		pair, err := s.generateTokens(user.ID, session.SessionID, session.ExpiresAt)
+		if err != nil {
+			return err
+		}
+		if err := tx.Rotate(ctx, session, refreshHash(pair.RefreshToken)); err != nil {
+			return err
+		}
+		result = AuthResult{User: NewUserDTO(user), Tokens: pair}
+		return nil
+	})
+	if err != nil {
+		return AuthResult{}, err
+	}
+	return result, nil
+}
 
-	return &token, nil
+func (s *TokenService) RevokeSession(ctx context.Context, raw string) error {
+	claims, err := s.ValidateRefreshToken(raw)
+	if errors.Is(err, ErrInvalidToken) {
+		// Missing, malformed and expired cookies are already unusable.
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.tokenRepository.Delete(ctx, claims.UserID, claims.SessionID, refreshHash(raw))
 }

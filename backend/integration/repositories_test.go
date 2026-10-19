@@ -33,7 +33,7 @@ import (
 func repoFixture(t *testing.T) (*pgxpool.Pool, *auth.UserRepository, *product.ProductRepository, *auth.TokenRepository, *slog.Logger) {
 	t.Helper()
 	pool := testdb.New(t)
-	testdb.ApplyMigrations(t, pool, 0, 6)
+	testdb.ApplyMigrations(t, pool, 0, 7)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return pool, auth.NewUserRepository(pool), product.NewProductRepository(pool, log), auth.NewTokenRepository(pool, log), log
 }
@@ -157,30 +157,28 @@ func TestUserAndTokenRepositories(t *testing.T) {
 			t.Fatal("Missing user must map to domain error")
 		}
 	}
-	if _, err := tokens.FindByUserId(ctx, first.ID); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
-		t.Fatal("Absent session accepted")
-	}
-	if err := tokens.Save(ctx, first.ID, "hash-first"); err != nil {
+	service := auth.NewTokenService(slog.New(slog.NewTextHandler(io.Discard, nil)), tokens, "access", "refresh", time.Minute, time.Hour)
+	firstPair, err := service.CreateSession(ctx, first.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tokens.Save(ctx, second.ID, "hash-second"); err != nil {
+	secondPair, err := service.CreateSession(ctx, second.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tokens.Save(ctx, first.ID, "hash-replaced"); err != nil {
+	if err := service.RevokeSession(ctx, firstPair.RefreshToken); err != nil {
 		t.Fatal(err)
 	}
-	stored, err := tokens.FindByUserId(ctx, first.ID)
-	if err != nil || stored.TokenHash != "hash-replaced" || stored.UserID != first.ID {
-		t.Fatal("Token replacement failed")
+	if err := service.RevokeSession(ctx, firstPair.RefreshToken); err != nil {
+		t.Fatal("Repeated logout must succeed")
 	}
-	if err := tokens.DeleteByUserId(ctx, first.ID); err != nil {
+	if _, err := service.RefreshSession(ctx, firstPair.RefreshToken); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
+		t.Fatal("Revoked session accepted")
+	}
+	if err := users.Activate(ctx, testActivationState(testActivationToken(2)).TokenHash); err != nil {
 		t.Fatal(err)
 	}
-	if err := tokens.DeleteByUserId(ctx, first.ID); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
-		t.Fatal("Deleted session accepted")
-	}
-	stored, err = tokens.FindByUserId(ctx, second.ID)
-	if err != nil || stored.TokenHash != "hash-second" {
+	if _, err := service.RefreshSession(ctx, secondPair.RefreshToken); err != nil {
 		t.Fatal("Logout affected another user")
 	}
 }
@@ -197,7 +195,9 @@ func TestRepositoriesPropagateConnectionFailures(t *testing.T) {
 		func() error { _, err := users.GetByEmail(ctx, "test@example.test"); return err },
 		func() error { _, err := users.Create(ctx, auth.CreateUserRequest{}); return err },
 		func() error { return users.Activate(ctx, "hash") },
-		func() error { return tokens.Save(ctx, 1, "hash") }, func() error { _, e := tokens.FindByUserId(ctx, 1); return e }, func() error { return tokens.DeleteByUserId(ctx, 1) },
+		func() error { return tokens.Create(ctx, auth.RefreshToken{}) },
+		func() error { return tokens.Delete(ctx, 1, testActivationToken(1), "hash") },
+		func() error { _, err := tokens.CleanupExpired(ctx); return err },
 	}
 	for i, operation := range operations {
 		if err := operation(); err == nil {
@@ -227,7 +227,7 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	pool, users, _, tokens, log := repoFixture(t)
 	tokenService := auth.NewTokenService(log, tokens, "test-access-secret", "test-refresh-secret", time.Minute, time.Hour)
 	mail := &activationCapture{}
-	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions())), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
+	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions()), false), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
 	request := func(method, path, body, bearer string, cookie *http.Cookie) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Idempotency-Key", "auth-http-action-01")

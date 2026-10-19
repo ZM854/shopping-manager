@@ -37,11 +37,9 @@ type userStore interface {
 }
 
 type userTokens interface {
-	GenerateTokens(int64) (TokenPair, error)
-	SaveToken(context.Context, int64, string) error
-	ValidateRefreshToken(string) (*TokenClaims, error)
-	FindToken(context.Context, int64, string) (*RefreshToken, error)
-	RemoveToken(context.Context, int64) error
+	CreateSession(context.Context, int64) (TokenPair, error)
+	RefreshSession(context.Context, string) (AuthResult, error)
+	RevokeSession(context.Context, string) error
 }
 
 type activationMailer interface {
@@ -181,17 +179,9 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 		return AuthResult{}, ErrUserNotActivated
 	}
 
-	tokens, err := s.tokenService.GenerateTokens(user.ID)
+	tokens, err := s.tokenService.CreateSession(ctx, user.ID)
 
 	if err != nil {
-		return AuthResult{}, err
-	}
-
-	if err = s.tokenService.SaveToken(
-		ctx,
-		user.ID,
-		tokens.RefreshToken,
-	); err != nil {
 		return AuthResult{}, err
 	}
 
@@ -202,56 +192,9 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 }
 
 func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
-	claims, err := s.tokenService.ValidateRefreshToken(refreshToken)
-
-	if err != nil {
-		return err
-	}
-
-	return s.tokenService.RemoveToken(ctx, claims.UserID)
+	return s.tokenService.RevokeSession(ctx, refreshToken)
 }
 
 func (s *UserService) Refresh(ctx context.Context, refreshToken string) (AuthResult, error) {
-	claims, err := s.tokenService.ValidateRefreshToken(refreshToken)
-
-	if err != nil {
-		return AuthResult{}, err
-	}
-
-	_, err = s.tokenService.FindToken(ctx, claims.UserID, refreshToken)
-
-	if err != nil {
-		return AuthResult{}, err
-	}
-
-	user, err := s.userRepository.GetById(ctx, claims.UserID)
-
-	if err != nil {
-		return AuthResult{}, err
-	}
-
-	if !user.IsEmailVerified {
-		if err := s.tokenService.RemoveToken(ctx, user.ID); err != nil &&
-			!errors.Is(err, ErrRefreshTokenNotFound) {
-			return AuthResult{}, err
-		}
-		return AuthResult{}, ErrUserNotActivated
-	}
-
-	tokens, err := s.tokenService.GenerateTokens(user.ID)
-
-	if err != nil {
-		return AuthResult{}, err
-	}
-
-	err = s.tokenService.SaveToken(ctx, user.ID, tokens.RefreshToken)
-
-	if err != nil {
-		return AuthResult{}, err
-	}
-
-	return AuthResult{
-		User:   NewUserDTO(user),
-		Tokens: tokens,
-	}, nil
+	return s.tokenService.RefreshSession(ctx, refreshToken)
 }

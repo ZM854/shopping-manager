@@ -17,7 +17,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 	engine := New(
 		log,
 		shopping.NewHandler(nil, log),
-		auth.NewAuthHandler(log, nil),
+		auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(nil),
 		"http://localhost:5173",
 	)
@@ -67,7 +67,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 
 func TestCORSAllowedAndRejectedOrigins(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil), middleware.NewAuthMiddleware(nil), "http://client.example.test")
+	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), "http://client.example.test")
 	for _, test := range []struct {
 		origin string
 		status int

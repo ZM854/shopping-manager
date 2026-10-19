@@ -49,7 +49,7 @@ func newShoppingFixture(t *testing.T) *shoppingFixture {
 		}
 		f.tokens[user] = pair.AccessToken
 	}
-	f.router = router.New(log, shopping.NewHandler(f.service, log), auth.NewAuthHandler(log, nil), middleware.NewAuthMiddleware(tokens), "http://client.example.test")
+	f.router = router.New(log, shopping.NewHandler(f.service, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(tokens), "http://client.example.test")
 	return f
 }
 func (f *shoppingFixture) request(user int64, method, path, body, key string) *httptest.ResponseRecorder {

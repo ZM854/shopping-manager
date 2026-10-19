@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -15,7 +17,6 @@ import (
 
 const (
 	refreshCookieName = "refreshToken"
-	refreshCookieAge  = 30 * 24 * 60 * 60
 )
 
 type authService interface {
@@ -28,17 +29,20 @@ type authService interface {
 }
 
 type AuthHandler struct {
-	userService authService
-	log         *slog.Logger
+	userService  authService
+	log          *slog.Logger
+	cookieSecure bool
 }
 
 func NewAuthHandler(
 	log *slog.Logger,
 	userService authService,
+	cookieSecure bool,
 ) *AuthHandler {
 	return &AuthHandler{
-		log:         log.With("component", "handler", "entity", "auth"),
-		userService: userService,
+		log:          log.With("component", "handler", "entity", "auth"),
+		userService:  userService,
+		cookieSecure: cookieSecure,
 	}
 }
 
@@ -101,7 +105,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	refreshToken, err := c.Cookie(refreshCookieName)
 	if err != nil {
-		writeAuthError(c, http.StatusUnauthorized, "unauthorized", "Требуется авторизация")
+		h.clearRefreshCookie(c)
+		c.JSON(http.StatusOK, gin.H{"message": "Выход выполнен"})
 		return
 	}
 
@@ -215,17 +220,30 @@ func writeAuthError(c *gin.Context, status int, code string, message string) {
 }
 
 func (h *AuthHandler) writeSession(c *gin.Context, result AuthResult) {
-	h.setRefreshCookie(c, result.Tokens.RefreshToken)
+	h.setRefreshCookie(c, result.Tokens.RefreshToken, result.Tokens.RefreshExpiresAt)
 	c.JSON(http.StatusOK, AuthResponse{
 		User:        result.User,
 		AccessToken: result.Tokens.AccessToken,
 	})
 }
 
-func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string) {
-	c.SetCookie(refreshCookieName, token, refreshCookieAge, "/", "", false, true)
+func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string, expiresAt time.Time) {
+	age := int(math.Ceil(time.Until(expiresAt).Seconds()))
+	if age <= 0 {
+		h.clearRefreshCookie(c)
+		return
+	}
+	h.writeRefreshCookie(c, token, age, expiresAt)
 }
 
 func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
-	c.SetCookie(refreshCookieName, "", -1, "/", "", false, true)
+	h.writeRefreshCookie(c, "", -1, time.Unix(1, 0))
+}
+
+func (h *AuthHandler) writeRefreshCookie(c *gin.Context, token string, age int, expiresAt time.Time) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name: refreshCookieName, Value: token, Path: "/", MaxAge: age,
+		Expires: expiresAt, HttpOnly: true, Secure: h.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
 }

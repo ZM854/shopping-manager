@@ -16,13 +16,17 @@ func TestJWTRequiresAlgorithmPurposeExpiryAndUser(t *testing.T) {
 	for _, purpose := range []string{"access", "refresh"} {
 		for _, scenario := range []string{
 			"valid", "HS384", "HS512", "missing_exp", "expired", "missing_sub",
-			"wrong_sub", "missing_user", "zero_user", "negative_user", "wrong_key",
+			"wrong_sub", "missing_user", "zero_user", "negative_user", "wrong_key", "missing_iat", "future_iat", "exp_before_iat",
+			"missing_sid", "invalid_sid", "missing_jti", "invalid_jti",
 		} {
 			t.Run(purpose+"/"+scenario, func(t *testing.T) {
 				claims := jwt.MapClaims{
 					"user_id": 42,
 					"sub":     purpose,
 					"exp":     time.Now().Add(time.Minute).Unix(),
+					"iat":     time.Now().Unix(),
+					"sid":     testActivationToken,
+					"jti":     testActivationToken,
 				}
 				var method jwt.SigningMethod = jwt.SigningMethodHS256
 				signingKey := key
@@ -50,6 +54,20 @@ func TestJWTRequiresAlgorithmPurposeExpiryAndUser(t *testing.T) {
 					claims["user_id"] = -1
 				case "wrong_key":
 					signingKey = "different-test-only-key"
+				case "missing_iat":
+					delete(claims, "iat")
+				case "future_iat":
+					claims["iat"] = time.Now().Add(time.Hour).Unix()
+				case "exp_before_iat":
+					claims["iat"] = time.Now().Add(2 * time.Minute).Unix()
+				case "missing_sid":
+					delete(claims, "sid")
+				case "invalid_sid":
+					claims["sid"] = "bad"
+				case "missing_jti":
+					delete(claims, "jti")
+				case "invalid_jti":
+					claims["jti"] = "bad"
 				}
 				token, err := jwt.NewWithClaims(method, claims).SignedString([]byte(signingKey))
 				if err != nil {
@@ -60,7 +78,7 @@ func TestJWTRequiresAlgorithmPurposeExpiryAndUser(t *testing.T) {
 					validate = service.ValidateRefreshToken
 				}
 				result, err := validate(token)
-				if scenario == "valid" {
+				if scenario == "valid" || purpose == "access" && (strings.Contains(scenario, "sid") || strings.Contains(scenario, "jti")) {
 					if err != nil || result.UserID != 42 {
 						t.Fatal("Valid token rejected")
 					}

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ type Config struct {
 	ServerPort   string
 	PublicAPIURL string
 	FrontendURL  string
+	CookieSecure bool
 
 	DBHost     string
 	DBPort     string
@@ -56,6 +58,10 @@ func Load() (Config, error) {
 	frontendURL := os.Getenv("FRONTEND_URL")
 	if frontendURL == "" {
 		frontendURL = "http://localhost:5173"
+	}
+	cookieSecure, err := validateSessionURLs(os.Getenv("APP_ENV"), publicAPIURL, frontendURL)
+	if err != nil {
+		return Config{}, err
 	}
 	accessTTL, err := parseDuration("JWT_ACCESS_TTL", os.Getenv("JWT_ACCESS_TTL"), 15*time.Minute)
 	if err != nil {
@@ -106,6 +112,7 @@ func Load() (Config, error) {
 		ServerPort:   serverPort,
 		PublicAPIURL: strings.TrimRight(publicAPIURL, "/"),
 		FrontendURL:  strings.TrimRight(frontendURL, "/"),
+		CookieSecure: cookieSecure,
 
 		DBHost:     os.Getenv("DB_HOST"),
 		DBPort:     os.Getenv("DB_PORT"),
@@ -131,6 +138,28 @@ func Load() (Config, error) {
 		SMTPAuthEnabled: smtpAuth,
 		SMTPTLSRequired: smtpTLS,
 	}, nil
+}
+
+func validateSessionURLs(appEnv, apiURL, frontendURL string) (bool, error) {
+	var secure bool
+	for index, entry := range []struct{ name, value string }{
+		{"PUBLIC_API_URL", apiURL}, {"FRONTEND_URL", frontendURL},
+	} {
+		u, err := url.Parse(entry.value)
+		if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+			(u.Scheme != "https" && u.Scheme != "http") {
+			return false, fmt.Errorf("%s must be an absolute HTTP(S) URL without credentials, query or fragment", entry.name)
+		}
+		if u.Scheme == "http" && appEnv != "dev" {
+			return false, fmt.Errorf("%s requires HTTPS outside APP_ENV=dev", entry.name)
+		}
+		if index == 0 {
+			secure = u.Scheme == "https"
+		} else if secure != (u.Scheme == "https") {
+			return false, fmt.Errorf("PUBLIC_API_URL and FRONTEND_URL must use the same scheme")
+		}
+	}
+	return secure, nil
 }
 
 func parseDuration(name string, value string, fallback time.Duration) (time.Duration, error) {
