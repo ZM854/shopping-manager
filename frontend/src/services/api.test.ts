@@ -33,7 +33,7 @@ describe('API-клиент', () => {
     const rejected = expect(old).rejects.toThrow('Сессия изменилась');
     await waitFor(() => expect(read).toHaveBeenCalledOnce());
     fetchMock.mockResolvedValueOnce(
-      Response.json({ accessToken: 'other', user: { id: 2 } }),
+      Response.json({ accessToken: 'other', user: { id: '2' } }),
     );
     await sessionCoordinator.login({
       email: 'other@example.test',
@@ -52,7 +52,7 @@ describe('API-клиент', () => {
     fetchMock.mockReturnValueOnce(pending);
     const request = apiFetch('/shopping-lists');
     fetchMock.mockResolvedValueOnce(
-      Response.json({ accessToken: 'new', user: { id: 1 } }),
+      Response.json({ accessToken: 'new', user: { id: '1' } }),
     );
     await sessionCoordinator.refresh();
     fetchMock.mockResolvedValueOnce(Response.json([]));
@@ -98,7 +98,7 @@ describe('API-клиент', () => {
     const strictModeRepeat = sessionCoordinator.initialize();
     const resource = apiFetch('/shopping-lists');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    const session = { accessToken: 'new', user: { id: 42 } };
+    const session = { accessToken: 'new', user: { id: '42' } };
     resolveRefresh(Response.json(session));
     await expect(initial).resolves.toBeUndefined();
     await expect(strictModeRepeat).resolves.toBeUndefined();
@@ -166,7 +166,7 @@ describe('API-клиент', () => {
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(
-        Response.json({ accessToken: 'new', user: { id: 1 } }),
+        Response.json({ accessToken: 'new', user: { id: '1' } }),
       )
       .mockResolvedValueOnce(
         Response.json({ id: '9007199254740993', quantity: '999999999.999' }),
@@ -246,7 +246,7 @@ describe('API-клиент', () => {
       expect(refreshCalls).toBe(1);
       expect(originalCalls).toBe(2);
     });
-    resolveRefresh(Response.json({ accessToken: 'new', user: { id: 1 } }));
+    resolveRefresh(Response.json({ accessToken: 'new', user: { id: '1' } }));
     await expect(results).resolves.toEqual([
       { url: '/api/products' },
       { url: '/api/products/7' },
@@ -259,13 +259,21 @@ describe('API-клиент', () => {
     setAccessToken('old');
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
-      .mockResolvedValueOnce(new Response(null, { status: 403 }));
-    await expect(apiFetch('/products')).rejects.toThrow('Request failed');
+      .mockResolvedValueOnce(
+        Response.json(
+          { code: 'email_not_verified', message: 'Подтвердите почту' },
+          { status: 403 },
+        ),
+      );
+    await expect(apiFetch('/products')).rejects.toMatchObject({
+      status: 403,
+      code: 'email_not_verified',
+    });
     expect(getAccessToken()).toBeNull();
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(
-        Response.json({ accessToken: 'new', user: { id: 1 } }),
+        Response.json({ accessToken: 'new', user: { id: '1' } }),
       )
       .mockResolvedValueOnce(Response.json([]));
     await expect(apiFetch('/products')).resolves.toEqual([]);
@@ -275,7 +283,7 @@ describe('API-клиент', () => {
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(
-        Response.json({ accessToken: 'new', user: { id: 1 } }),
+        Response.json({ accessToken: 'new', user: { id: '1' } }),
       )
       .mockResolvedValueOnce(new Response(null, { status: 401 }));
     await expect(apiFetch('/products')).rejects.toThrow();

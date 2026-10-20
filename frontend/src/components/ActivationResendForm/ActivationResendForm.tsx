@@ -4,6 +4,7 @@ import { authService } from '../../services/authService';
 import Button from '../UI/button/Button/Button';
 import TextField from '../UI/input/TextField/TextField';
 import cls from './ActivationResendForm.module.css';
+import { normalizeEmail, emailError } from '../../shared/authValidation';
 
 export default function ActivationResendForm({
   initialEmail = '',
@@ -33,6 +34,7 @@ export default function ActivationResendForm({
 
   return (
     <form
+      noValidate
       className={cls.form}
       aria-label="Повторное письмо"
       onSubmit={handleSubmit(submit)}
@@ -46,9 +48,12 @@ export default function ActivationResendForm({
         label="Почта для подтверждения"
         type="email"
         autoComplete="email"
-        maxLength={254}
         error={errors.email?.message}
-        {...register('email', { required: 'Введите адрес почты' })}
+        {...register('email', {
+          required: 'Введите адрес почты',
+          setValueAs: normalizeEmail,
+          validate: emailError,
+        })}
       />
       {message && <p role="status">{message}</p>}
       {error && (

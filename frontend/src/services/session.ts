@@ -176,7 +176,8 @@ export class SessionCoordinator {
           this.assertRequest(context);
           if (
             error instanceof ApiError &&
-            (error.status === 401 || error.status === 403)
+            (error.status === 401 ||
+              (error.status === 403 && error.code === 'email_not_verified'))
           ) {
             this.guest();
           } else {

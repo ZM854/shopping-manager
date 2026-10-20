@@ -29,7 +29,7 @@ export function useProducts() {
 
     if (!productToUpdate) {
       setError('product not found');
-      return;
+      throw new Error('product not found');
     }
 
     try {
@@ -43,8 +43,9 @@ export function useProducts() {
           product.id === id ? { ...updatedProduct } : product,
         ),
       );
-    } catch (e) {
-      console.log(e);
+    } catch (error) {
+      setError('failed to update product');
+      throw error;
     }
   };
 

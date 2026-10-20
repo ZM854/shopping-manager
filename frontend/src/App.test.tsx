@@ -7,7 +7,7 @@ vi.mock('./services/authService', () => ({
   authService: {
     refresh: vi.fn().mockResolvedValue({
       user: {
-        id: 1,
+        id: '1',
         name: 'Имя',
         email: 'user@example.test',
         isEmailVerified: true,

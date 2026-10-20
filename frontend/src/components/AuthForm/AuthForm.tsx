@@ -5,6 +5,13 @@ import type { AuthFormData, AuthFormProps } from './AuthForm.types';
 import Button from '../UI/button/Button/Button';
 import cls from './AuthForm.module.css';
 import TextField from '../UI/input/TextField/TextField';
+import {
+  trimAuth,
+  normalizeEmail,
+  nameError,
+  emailError,
+  passwordError,
+} from '../../shared/authValidation';
 
 export default function AuthForm({
   mode,
@@ -33,7 +40,11 @@ export default function AuthForm({
       <div className={cls.card}>
         <h1 className={cls.title}>{isLogin ? 'Вход' : 'Регистрация'}</h1>
 
-        <form className={cls.form} onSubmit={handleSubmit(handleFormSubmit)}>
+        <form
+          noValidate
+          className={cls.form}
+          onSubmit={handleSubmit(handleFormSubmit)}
+        >
           {!isLogin && (
             <TextField
               label="Имя"
@@ -42,16 +53,8 @@ export default function AuthForm({
               error={errors.name?.message}
               {...register('name', {
                 required: 'Введите имя',
-
-                minLength: {
-                  value: 2,
-                  message: 'Минимум 2 символа',
-                },
-
-                maxLength: {
-                  value: 20,
-                  message: 'Максимум 20 символов',
-                },
+                setValueAs: trimAuth,
+                validate: (value) => nameError(value || ''),
               })}
             />
           )}
@@ -62,10 +65,8 @@ export default function AuthForm({
             error={errors.email?.message}
             {...register('email', {
               required: 'Введите email',
-              pattern: {
-                value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                message: 'Некорректный email',
-              },
+              setValueAs: normalizeEmail,
+              validate: emailError,
             })}
           />
           <TextField
@@ -76,15 +77,7 @@ export default function AuthForm({
             {...register('password', {
               required: 'Введите пароль',
 
-              minLength: {
-                value: 6,
-                message: 'Минимум 6 символов',
-              },
-
-              maxLength: {
-                value: 72,
-                message: 'Максимум 72 символа',
-              },
+              validate: (value) => passwordError(value, !isLogin),
             })}
           />
           {error && (

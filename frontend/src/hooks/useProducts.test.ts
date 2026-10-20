@@ -57,26 +57,41 @@ describe('useProducts', () => {
     );
     expect(result.current.products).toEqual([]);
   });
-  it.each(['create', 'delete', 'clear'] as const)(
+  it.each(['create', 'update', 'delete', 'clear'] as const)(
     '%s при отказе сохраняет данные и пробрасывает ошибку',
     async (operation) => {
       const { result } = renderHook(useProducts);
       await waitFor(() => expect(result.current.products).toHaveLength(1));
       const error = new Error('offline');
       service.postProduct.mockRejectedValue(error);
+      service.updateProduct.mockRejectedValue(error);
       service.deleteProduct.mockRejectedValue(error);
       service.deleteAllProducts.mockRejectedValue(error);
       await act(async () => {
         const promise =
           operation === 'create'
             ? result.current.createProduct(initial)
-            : operation === 'delete'
-              ? result.current.deleteProduct(1)
-              : result.current.deleteAllProducts();
+            : operation === 'update'
+              ? result.current.updateProduct(1, initial)
+              : operation === 'delete'
+                ? result.current.deleteProduct(1)
+                : result.current.deleteAllProducts();
         await expect(promise).rejects.toBe(error);
       });
       expect(result.current.products).toEqual([initial]);
       expect(result.current.error).not.toBeNull();
     },
   );
+  it('отсутствующая позиция отклоняет обновление без запроса и изменения данных', async () => {
+    const { result } = renderHook(useProducts);
+    await waitFor(() => expect(result.current.products).toEqual([initial]));
+    await act(async () => {
+      await expect(result.current.updateProduct(999, initial)).rejects.toThrow(
+        'product not found',
+      );
+    });
+    expect(service.updateProduct).not.toHaveBeenCalled();
+    expect(result.current.products).toEqual([initial]);
+    expect(result.current.error).toBe('product not found');
+  });
 });

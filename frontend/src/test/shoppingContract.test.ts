@@ -11,7 +11,7 @@ describe('OpenAPI списков', () => {
   it('имеет валидную структуру и не зависит от внешних файлов', async () => {
     const parser = new SwaggerParser();
     const document = await parser.validate(contractPath);
-    expect(document.info.version).toBe('0.5.0');
+    expect(document.info.version).toBe('0.6.0');
     expect(parser.$refs.paths()).toHaveLength(1);
   });
 
@@ -72,6 +72,22 @@ describe('OpenAPI списков', () => {
     const document = await SwaggerParser.dereference(contractPath);
     if (!('components' in document)) throw new Error('Ожидался OpenAPI 3');
     const schemas = document.components?.schemas;
+    expect(schemas?.UserDTO).toMatchObject({
+      properties: { id: { type: 'string', pattern: '^[1-9][0-9]{0,18}$' } },
+    });
+    for (const path of ['/login', '/registration']) {
+      expect(document.paths?.[path]?.post?.responses?.['413']).toBeDefined();
+      expect(document.paths?.[path]?.post?.responses?.['429']).toBeDefined();
+    }
+    for (const path of ['/refresh', '/logout']) {
+      expect(document.paths?.[path]?.post?.parameters).toContainEqual(
+        expect.objectContaining({
+          in: 'header',
+          name: 'Origin',
+          required: true,
+        }),
+      );
+    }
     expect(schemas?.RegistrationResponse).toMatchObject({
       additionalProperties: false,
       required: ['activationRequired'],

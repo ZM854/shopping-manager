@@ -171,7 +171,7 @@ describe('Страницы авторизации и навигация', () => 
   it('профиль показывает пользователя и вызывает выход', async () => {
     const auth = authValue({
       user: {
-        id: 1,
+        id: '1',
         name: 'Имя',
         email: 'user@example.test',
         isEmailVerified: true,

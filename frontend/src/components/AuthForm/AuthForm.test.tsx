@@ -1,9 +1,46 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import AuthForm from './AuthForm';
 describe('AuthForm', () => {
+  it('обрезает имя/email, сохраняет 20 Unicode-кодовых точек и отклоняет 74 байта пароля', async () => {
+    const submit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <AuthForm mode="registration" onSubmit={submit} />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText('Имя'), {
+      target: { value: '  ' + '😀'.repeat(20) + '  ' },
+    });
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: ' USER@Example.Test ' },
+    });
+    fireEvent.change(screen.getByLabelText('Пароль'), {
+      target: { value: 'я'.repeat(37) },
+    });
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Зарегистрироваться' }),
+    );
+    expect(
+      await screen.findByText('Пароль должен занимать не более 72 байт UTF-8'),
+    ).toBeVisible();
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Пароль'), {
+      target: { value: 'я'.repeat(36) },
+    });
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Зарегистрироваться' }),
+    );
+    await waitFor(() =>
+      expect(submit).toHaveBeenCalledWith({
+        name: '😀'.repeat(20),
+        email: 'user@example.test',
+        password: 'я'.repeat(36),
+      }),
+    );
+  });
   it('проверяет обязательные поля и отправляет данные входа', async () => {
     const submit = vi.fn();
     const user = userEvent.setup({ delay: null });

@@ -20,7 +20,7 @@ import ProfilePage from '../../pages/ProfilePage/ProfilePage';
 const fetchMock = vi.fn<typeof fetch>();
 const response = {
   user: {
-    id: 1,
+    id: '1',
     name: 'Имя',
     email: 'user@example.test',
     isEmailVerified: true,
@@ -233,7 +233,7 @@ describe('AuthProvider с настоящим HTTP-клиентом', () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({
         ...response,
-        user: { ...response.user, id: 2, name: 'Другой аккаунт' },
+        user: { ...response.user, id: '2', name: 'Другой аккаунт' },
         accessToken: 'other',
       }),
     );

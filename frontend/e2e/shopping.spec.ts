@@ -193,7 +193,10 @@ async function registerAndLogin(page: Page, request: APIRequestContext) {
   const response = await login;
   expect(response.status()).toBe(200);
   expect(response.headers()['cache-control']).toBe('no-store');
-  const session: { accessToken: string } = await response.json();
+  const session: { accessToken: string; user: { id: string } } =
+    await response.json();
+  expect(typeof session.user.id).toBe('string');
+  expect(session.user.id).toMatch(/^[1-9][0-9]*$/);
   expect(Object.keys(session).sort()).toEqual(['accessToken', 'user']);
   await expect(page).toHaveURL(/\/lists$/);
   await expect(page.getByText('У вас пока нет списков покупок.')).toBeVisible();

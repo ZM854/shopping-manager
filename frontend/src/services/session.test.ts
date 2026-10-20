@@ -8,7 +8,7 @@ import { getAccessToken } from './tokenStorage';
 
 const result: AuthResponse = {
   user: {
-    id: 1,
+    id: '1',
     name: 'Первый',
     email: 'one@example.test',
     isEmailVerified: true,
@@ -63,6 +63,19 @@ function notify(kind: SessionEvent['kind']) {
 }
 
 describe('Поколения сессии', () => {
+  it('ошибка Origin не означает отзыв сессии и сохраняет данные для повтора', async () => {
+    transport.refresh.mockResolvedValueOnce(result);
+    await coordinator.initialize();
+    transport.refresh.mockRejectedValueOnce(
+      new ApiError(403, 'Origin не разрешён', 'origin_forbidden'),
+    );
+    await expect(coordinator.refresh()).rejects.toMatchObject({
+      code: 'origin_forbidden',
+    });
+    expect(coordinator.getSnapshot().status).toBe('error');
+    expect(coordinator.getSnapshot().user).toEqual(result.user);
+    expect(getAccessToken()).toBe(result.accessToken);
+  });
   it('вход другой вкладки очищает приватное состояние, старый refresh не отменяет новый', async () => {
     transport.refresh.mockResolvedValueOnce(result);
     await coordinator.initialize();
@@ -75,7 +88,7 @@ describe('Поколения сессии', () => {
     await waitFor(() => expect(transport.refresh).toHaveBeenCalledTimes(2));
     const next = {
       ...result,
-      user: { ...result.user, id: 2, name: 'Второй' },
+      user: { ...result.user, id: '2', name: 'Второй' },
       accessToken: 'second',
     };
     transport.refresh.mockResolvedValueOnce(next);
@@ -119,7 +132,9 @@ describe('Поколения сессии', () => {
       'Некорректный ответ',
     );
     expect(coordinator.getSnapshot().status).toBe('error');
-    transport.refresh.mockRejectedValueOnce(new ApiError(403));
+    transport.refresh.mockRejectedValueOnce(
+      new ApiError(403, 'Подтвердите почту', 'email_not_verified'),
+    );
     await expect(coordinator.refresh()).rejects.toMatchObject({ status: 403 });
     expect(coordinator.getSnapshot().status).toBe('guest');
   });
