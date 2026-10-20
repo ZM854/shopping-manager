@@ -105,6 +105,11 @@ func (s *UserService) Registration(
 	email string,
 	password string,
 ) (RegistrationResponse, error) {
+	req := RegistrationRequest{Name: name, Email: email, Password: password}
+	if err := validateAuthFields(&req); err != nil {
+		return RegistrationResponse{}, err
+	}
+	name, email = req.Name, req.Email
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return RegistrationResponse{}, err
@@ -131,6 +136,11 @@ func (s *UserService) Activate(ctx context.Context, token string) error {
 }
 
 func (s *UserService) ResendActivation(ctx context.Context, email string) error {
+	req := ResendActivationRequest{Email: email}
+	if err := validateAuthFields(&req); err != nil {
+		return err
+	}
+	email = req.Email
 	var token string
 	err := s.userRepository.InActivationTx(ctx, func(tx activationTransaction) error {
 		account, err := tx.LockActivation(ctx, email)
@@ -158,6 +168,11 @@ func (s *UserService) ResendActivation(ctx context.Context, email string) error 
 }
 
 func (s *UserService) Login(ctx context.Context, email string, password string) (AuthResult, error) {
+	req := LoginRequest{Email: email, Password: password}
+	if err := validateAuthFields(&req); err != nil {
+		return AuthResult{}, err
+	}
+	email = req.Email
 
 	user, err := s.userRepository.GetByEmail(ctx, email)
 

@@ -52,6 +52,9 @@ services:
       ACTIVATION_RESEND_INTERVAL: 2s
       PUBLIC_API_URL: http://127.0.0.1:55173/api
       FRONTEND_URL: http://127.0.0.1:55173
+      AUTH_LOGIN_LIMIT: "300"
+      AUTH_REGISTRATION_LIMIT: "100"
+      AUTH_RESEND_LIMIT: "100"
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_AUTH_ENABLED: "false"

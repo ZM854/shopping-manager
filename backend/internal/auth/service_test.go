@@ -93,7 +93,7 @@ func (f *tokensFake) CreateSession(ctx context.Context, id int64) (TokenPair, er
 }
 func (f *tokensFake) RefreshSession(ctx context.Context, raw string) (AuthResult, error) {
 	f.ctx, f.token = ctx, raw
-	return AuthResult{User: UserDTO{ID: 42}}, f.refreshErr
+	return AuthResult{User: UserDTO{ID: "42"}}, f.refreshErr
 }
 func (f *tokensFake) RevokeSession(ctx context.Context, raw string) error {
 	f.ctx, f.token = ctx, raw
@@ -154,7 +154,7 @@ func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 			switch stage {
 			case "hash":
 				password = strings.Repeat("x", 73)
-				want = bcrypt.ErrPasswordTooLong
+				want = nil // Validation must reject before bcrypt or repository calls.
 			case "duplicate":
 				r.err = ErrUserAlreadyExist
 				want = ErrUserAlreadyExist
@@ -165,7 +165,8 @@ func TestRegistrationErrorsStopFollowingSteps(t *testing.T) {
 				want = ErrActivationDelivery
 			}
 			_, err := newTestUserService(testLog(), r, ts, m, "http://example.test/activate").Registration(context.Background(), "Имя", "user@example.test", password)
-			if !errors.Is(err, want) {
+			var invalid *ValidationError
+			if stage == "hash" && !errors.As(err, &invalid) || stage != "hash" && !errors.Is(err, want) {
 				t.Fatalf("error=%v, want %v", err, want)
 			}
 			if stage == "hash" || stage == "duplicate" || stage == "repository" {
@@ -209,7 +210,7 @@ func TestLoginCredentialsActivationAndDependencyFailures(t *testing.T) {
 			if !errors.Is(err, want) {
 				t.Fatalf("error=%v want %v", err, want)
 			}
-			if want == nil && (resp.User.ID != 42 || ts.saved != 1 || ts.token != "test-refresh") {
+			if want == nil && (resp.User.ID != "42" || ts.saved != 1 || ts.token != "test-refresh") {
 				t.Fatal("Login did not persist session")
 			}
 			if stage == "missing" || stage == "repository" || stage == "password" || stage == "inactive" {
@@ -297,7 +298,7 @@ func TestUserServiceDelegatesSessionOperations(t *testing.T) {
 		service := newTestUserService(testLog(), &usersFake{}, tokens, nil, "")
 		ctx := context.Background()
 		result, err := service.Refresh(ctx, "refresh")
-		if !errors.Is(err, failure) || tokens.token != "refresh" || tokens.ctx != ctx || result.User.ID != 42 {
+		if !errors.Is(err, failure) || tokens.token != "refresh" || tokens.ctx != ctx || result.User.ID != "42" {
 			t.Fatal("Refresh lost result, error or context")
 		}
 		if err := service.Logout(ctx, "logout"); !errors.Is(err, failure) || tokens.token != "logout" || tokens.ctx != ctx {

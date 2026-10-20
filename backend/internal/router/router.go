@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
+	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 	"github.com/gin-contrib/cors"
@@ -17,18 +18,18 @@ func New(
 	shoppingHandler *shopping.Handler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
-	frontendURL string,
+	cfg config.Config,
 ) *gin.Engine {
 	router := gin.New()
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		panic("invalid trusted proxy configuration")
+	}
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestLogger(log))
+	router.Use(middleware.CheckOrigin(cfg.AllowedOrigins))
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			frontendURL,
-			"http://localhost:5173",
-			"http://localhost:4173",
-		},
+		AllowOrigins: cfg.AllowedOrigins,
 		AllowMethods: []string{
 			"GET",
 			"POST",
@@ -45,10 +46,16 @@ func New(
 			"Idempotency-Key",
 		},
 		AllowCredentials: true,
+		ExposeHeaders:    []string{"Retry-After"},
 		MaxAge:           12 * time.Hour,
 	}))
 
 	api := router.Group("/api")
+	api.Use(middleware.NewRateLimiter(map[string]middleware.RateRule{
+		"/api/login":             {Limit: cfg.AuthLoginLimit, Window: time.Minute},
+		"/api/registration":      {Limit: cfg.AuthRegistrationLimit, Window: time.Hour},
+		"/api/activation/resend": {Limit: cfg.AuthResendLimit, Window: 10 * time.Minute},
+	}).Handle())
 	api.GET("/healthz", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})

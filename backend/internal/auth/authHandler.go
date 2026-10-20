@@ -49,14 +49,16 @@ func NewAuthHandler(
 func (h *AuthHandler) Registration(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var req RegistrationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeAuthError(c, http.StatusBadRequest, "validation_failed", "Проверьте поля запроса")
+	if !bindAuthRequest(c, &req) {
 		return
 	}
 
 	resp, err := h.userService.Registration(
 		c.Request.Context(), req.Name, req.Email, req.Password,
 	)
+	if writeValidationError(c, err) {
+		return
+	}
 	if errors.Is(err, ErrUserAlreadyExist) {
 		writeAuthError(c, http.StatusConflict, "user_already_exists", "Пользователь с таким email уже существует")
 		return
@@ -67,7 +69,7 @@ func (h *AuthHandler) Registration(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.log.Error("failed to register user", "error", err)
+		h.log.Error("failed to register user")
 		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось зарегистрироваться")
 		return
 	}
@@ -78,12 +80,14 @@ func (h *AuthHandler) Registration(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var req LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeAuthError(c, http.StatusBadRequest, "validation_failed", "Проверьте поля запроса")
+	if !bindAuthRequest(c, &req) {
 		return
 	}
 
 	result, err := h.userService.Login(c.Request.Context(), req.Email, req.Password)
+	if writeValidationError(c, err) {
+		return
+	}
 	if errors.Is(err, ErrInvalidCredentials) {
 		writeAuthError(c, http.StatusUnauthorized, "invalid_credentials", "Неверный email или пароль")
 		return
@@ -93,7 +97,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.log.Error("failed to login", "error", err)
+		h.log.Error("failed to login")
 		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось выполнить вход")
 		return
 	}
@@ -111,7 +115,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	if err := h.userService.Logout(c.Request.Context(), refreshToken); err != nil {
-		h.log.Error("failed to logout", "error", err)
+		h.log.Error("failed to logout")
 		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось завершить сессию")
 		return
 	}
@@ -124,7 +128,7 @@ func (h *AuthHandler) Activate(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Referrer-Policy", "no-referrer")
 	var req ActivationRequest
-	if !bindActivationRequest(c, &req) {
+	if !bindAuthRequest(c, &req) {
 		return
 	}
 	err := h.userService.Activate(c.Request.Context(), req.Token)
@@ -142,7 +146,7 @@ func (h *AuthHandler) Activate(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func bindActivationRequest(c *gin.Context, req any) bool {
+func bindAuthRequest(c *gin.Context, req any) bool {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	payload, err := io.ReadAll(c.Request.Body)
 	if err == nil {
@@ -151,7 +155,13 @@ func bindActivationRequest(c *gin.Context, req any) bool {
 	if err == nil {
 		err = binding.Validator.ValidateStruct(req)
 	}
+	if err == nil {
+		err = validateAuthFields(req)
+	}
 	if err != nil {
+		if writeValidationError(c, err) {
+			return false
+		}
 		var sizeError *http.MaxBytesError
 		if errors.As(err, &sizeError) {
 			writeAuthError(c, http.StatusRequestEntityTooLarge, "body_too_large", "Слишком большой запрос")
@@ -166,10 +176,13 @@ func bindActivationRequest(c *gin.Context, req any) bool {
 func (h *AuthHandler) ResendActivation(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var req ResendActivationRequest
-	if !bindActivationRequest(c, &req) {
+	if !bindAuthRequest(c, &req) {
 		return
 	}
 	err := h.userService.ResendActivation(c.Request.Context(), req.Email)
+	if writeValidationError(c, err) {
+		return
+	}
 	var cooldown *ActivationCooldownError
 	if errors.As(err, &cooldown) {
 		c.Header("Retry-After", strconv.Itoa(cooldown.RetryAfter))
@@ -207,7 +220,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.log.Error("failed to refresh token", "error", err)
+		h.log.Error("failed to refresh token")
 		writeAuthError(c, http.StatusInternalServerError, "internal_error", "Не удалось обновить сессию")
 		return
 	}
@@ -217,6 +230,19 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 func writeAuthError(c *gin.Context, status int, code string, message string) {
 	c.JSON(status, gin.H{"code": code, "message": message})
+}
+
+func writeValidationError(c *gin.Context, err error) bool {
+	var invalid *ValidationError
+	if !errors.As(err, &invalid) {
+		return false
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"code":        "validation_failed",
+		"message":     "Проверьте поля запроса",
+		"fieldErrors": invalid.Fields,
+	})
+	return true
 }
 
 func (h *AuthHandler) writeSession(c *gin.Context, result AuthResult) {

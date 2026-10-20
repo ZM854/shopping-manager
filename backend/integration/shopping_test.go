@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
+	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
@@ -49,7 +50,7 @@ func newShoppingFixture(t *testing.T) *shoppingFixture {
 		}
 		f.tokens[user] = pair.AccessToken
 	}
-	f.router = router.New(log, shopping.NewHandler(f.service, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(tokens), "http://client.example.test")
+	f.router = router.New(log, shopping.NewHandler(f.service, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(tokens), config.Config{AllowedOrigins: []string{"http://client.example.test"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000})
 	return f
 }
 func (f *shoppingFixture) request(user int64, method, path, body, key string) *httptest.ResponseRecorder {

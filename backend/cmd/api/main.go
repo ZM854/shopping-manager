@@ -98,7 +98,7 @@ func main() {
 		shoppingHandler,
 		authHandler,
 		authMiddleware,
-		cfg.FrontendURL,
+		cfg,
 	)
 
 	addr := cfg.ServerPort

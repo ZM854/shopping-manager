@@ -26,7 +26,7 @@ type authFake struct {
 func (f *authFake) response() (AuthResult, error) {
 	f.calls++
 	return AuthResult{
-		User:   UserDTO{ID: 42, Name: "Имя", IsEmailVerified: true},
+		User:   UserDTO{ID: "42", Name: "Имя", IsEmailVerified: true},
 		Tokens: TokenPair{AccessToken: "test-access", RefreshToken: "test-refresh", RefreshExpiresAt: time.Now().Add(time.Hour)},
 	}, f.err
 }
@@ -134,7 +134,7 @@ func TestAuthHTTPResponses(t *testing.T) {
 						}
 						var body map[string]any
 						if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil ||
-							body["code"] == nil || body["message"] == nil || len(body) != 2 {
+							body["code"] == nil || body["message"] == nil || len(body) > 3 || (len(body) == 3 && body["fieldErrors"] == nil) {
 							t.Fatal("Auth errors must use code/message without private details")
 						}
 					}

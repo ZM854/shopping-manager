@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ func configTestEnv(t *testing.T) {
 	t.Chdir(t.TempDir()) // Never load the real .env.
 	for _, key := range []string{
 		"APP_ENV", "SERVER_PORT", "PUBLIC_API_URL", "FRONTEND_URL",
+		"CORS_ALLOWED_ORIGINS", "TRUSTED_PROXIES", "AUTH_LOGIN_LIMIT", "AUTH_REGISTRATION_LIMIT", "AUTH_RESEND_LIMIT",
 		"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_SSLMODE",
 		"JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "JWT_ACCESS_TTL", "JWT_REFRESH_TTL",
 		"ACTIVATION_TTL", "ACTIVATION_RESEND_INTERVAL", "ACTIVATION_MAIL_TIMEOUT",
@@ -63,6 +65,42 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		cfg.DBHost != "db" || cfg.DBPassword != "fake-password" ||
 		cfg.SMTPFrom != "sender@example.test" {
 		t.Fatal("Overrides not applied")
+	}
+}
+
+func TestHTTPSettings(t *testing.T) {
+	configTestEnv(t)
+	cfg, err := Load()
+	if err != nil || len(cfg.AllowedOrigins) != 1 || cfg.AllowedOrigins[0] != "http://localhost:5173" || len(cfg.TrustedProxies) != 0 || cfg.AuthLoginLimit != 30 {
+		t.Fatal("Unsafe HTTP defaults")
+	}
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:4173")
+	t.Setenv("TRUSTED_PROXIES", "127.0.0.1,::1,192.0.2.0/24")
+	t.Setenv("AUTH_LOGIN_LIMIT", "5")
+	cfg, err = Load()
+	if err != nil || len(cfg.AllowedOrigins) != 2 || len(cfg.TrustedProxies) != 3 || cfg.AuthLoginLimit != 5 {
+		t.Fatal("Explicit HTTP configuration lost")
+	}
+	for key, value := range map[string]string{
+		"TRUSTED_PROXIES": "0.0.0.0/0", "CORS_ALLOWED_ORIGINS": "https://synthetic:secret@example.test/path", "AUTH_LOGIN_LIMIT": "0",
+	} {
+		old := os.Getenv(key)
+		t.Setenv(key, value)
+		if _, err := Load(); err == nil || strings.Contains(err.Error(), "synthetic") {
+			t.Fatal("Unsafe setting accepted or disclosed")
+		}
+		t.Setenv(key, old)
+	}
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("PUBLIC_API_URL", "https://app.example.test/api")
+	t.Setenv("FRONTEND_URL", "https://app.example.test")
+	if _, err := Load(); err == nil {
+		t.Fatal("Production accepts localhost HTTP origin")
+	}
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	cfg, err = Load()
+	if err != nil || len(cfg.AllowedOrigins) != 1 || cfg.AllowedOrigins[0] != "https://app.example.test" {
+		t.Fatal("Production gained implicit localhost origin")
 	}
 }
 

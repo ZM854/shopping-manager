@@ -13,11 +13,16 @@ import (
 )
 
 type Config struct {
-	AppENV       string
-	ServerPort   string
-	PublicAPIURL string
-	FrontendURL  string
-	CookieSecure bool
+	AppENV                string
+	ServerPort            string
+	PublicAPIURL          string
+	FrontendURL           string
+	CookieSecure          bool
+	AllowedOrigins        []string
+	TrustedProxies        []string
+	AuthLoginLimit        int
+	AuthRegistrationLimit int
+	AuthResendLimit       int
 
 	DBHost     string
 	DBPort     string
@@ -107,7 +112,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{
+	cfg := Config{
 		AppENV:       os.Getenv("APP_ENV"),
 		ServerPort:   serverPort,
 		PublicAPIURL: strings.TrimRight(publicAPIURL, "/"),
@@ -137,7 +142,11 @@ func Load() (Config, error) {
 		SMTPFrom:        os.Getenv("SMTP_FROM"),
 		SMTPAuthEnabled: smtpAuth,
 		SMTPTLSRequired: smtpTLS,
-	}, nil
+	}
+	if err := httpSettings(&cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func validateSessionURLs(appEnv, apiURL, frontendURL string) (bool, error) {
@@ -157,6 +166,9 @@ func validateSessionURLs(appEnv, apiURL, frontendURL string) (bool, error) {
 			secure = u.Scheme == "https"
 		} else if secure != (u.Scheme == "https") {
 			return false, fmt.Errorf("PUBLIC_API_URL and FRONTEND_URL must use the same scheme")
+		}
+		if index == 1 && strings.Trim(u.Path, "/") != "" {
+			return false, fmt.Errorf("FRONTEND_URL must not contain a path")
 		}
 	}
 	return secure, nil

@@ -33,7 +33,7 @@ import (
 func repoFixture(t *testing.T) (*pgxpool.Pool, *auth.UserRepository, *product.ProductRepository, *auth.TokenRepository, *slog.Logger) {
 	t.Helper()
 	pool := testdb.New(t)
-	testdb.ApplyMigrations(t, pool, 0, 7)
+	testdb.ApplyMigrations(t, pool, 0, 8)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return pool, auth.NewUserRepository(pool), product.NewProductRepository(pool, log), auth.NewTokenRepository(pool, log), log
 }
@@ -227,10 +227,11 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	pool, users, _, tokens, log := repoFixture(t)
 	tokenService := auth.NewTokenService(log, tokens, "test-access-secret", "test-refresh-secret", time.Minute, time.Hour)
 	mail := &activationCapture{}
-	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions()), false), middleware.NewAuthMiddleware(tokenService), "http://client.example.test")
+	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions()), false), middleware.NewAuthMiddleware(tokenService), config.Config{AllowedOrigins: []string{"http://client.example.test"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000})
 	request := func(method, path, body, bearer string, cookie *http.Cookie) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Idempotency-Key", "auth-http-action-01")
+		req.Header.Set("Origin", "http://client.example.test")
 		if bearer != "" {
 			req.Header.Set("Authorization", "Bearer "+bearer)
 		}

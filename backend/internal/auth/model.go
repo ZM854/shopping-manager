@@ -1,6 +1,9 @@
 package auth
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 type User struct {
 	ID              int64
@@ -56,7 +59,7 @@ type TokenPair struct {
 }
 
 type UserDTO struct {
-	ID              int64  `json:"id"`
+	ID              string `json:"id"`
 	Name            string `json:"name"`
 	Email           string `json:"email"`
 	IsEmailVerified bool   `json:"isEmailVerified"`
@@ -64,7 +67,7 @@ type UserDTO struct {
 
 func NewUserDTO(user User) UserDTO {
 	return UserDTO{
-		ID:              user.ID,
+		ID:              strconv.FormatInt(user.ID, 10),
 		Name:            user.Name,
 		Email:           user.Email,
 		IsEmailVerified: user.IsEmailVerified,
@@ -86,14 +89,14 @@ type RegistrationResponse struct {
 }
 
 type RegistrationRequest struct {
-	Name     string `json:"name" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6,max=72"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type ActivationRequest struct {
@@ -101,5 +104,5 @@ type ActivationRequest struct {
 }
 
 type ResendActivationRequest struct {
-	Email string `json:"email" binding:"required,email,max=254"`
+	Email string `json:"email"`
 }

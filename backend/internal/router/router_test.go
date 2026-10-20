@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -8,9 +9,45 @@ import (
 	"testing"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
+	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 )
+
+func TestRateLimitAndProxyTrust(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	for _, trusted := range []bool{false, true} {
+		cfg := config.Config{AllowedOrigins: []string{"http://client.example.test"}, AuthLoginLimit: 2, AuthRegistrationLimit: 2, AuthResendLimit: 2}
+		if trusted {
+			cfg.TrustedProxies = []string{"127.0.0.1"}
+		}
+		engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), cfg)
+		for index := range 3 {
+			req := httptest.NewRequest("POST", "/api/login", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", index+1))
+			response := httptest.NewRecorder()
+			engine.ServeHTTP(response, req)
+			want := 400
+			if !trusted && index == 2 {
+				want = 429
+			}
+			if response.Code != want || want == 429 && response.Header().Get("Retry-After") == "" {
+				t.Fatal("IP limiter trusts spoofed headers or loses Retry-After")
+			}
+		}
+		// Registration has its own budget, and GETs do not consume auth limits.
+		for _, path := range []string{"/api/registration", "/api/activation/resend"} {
+			req := httptest.NewRequest("POST", path, nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			response := httptest.NewRecorder()
+			engine.ServeHTTP(response, req)
+			if response.Code != 400 {
+				t.Fatal("Operations share a rate budget")
+			}
+		}
+	}
+}
 
 func TestAPIPrefixAndAuthorization(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -19,7 +56,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 		shopping.NewHandler(nil, log),
 		auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(nil),
-		"http://localhost:5173",
+		config.Config{AllowedOrigins: []string{"http://localhost:5173"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000},
 	)
 
 	for _, test := range []struct {
@@ -67,7 +104,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 
 func TestCORSAllowedAndRejectedOrigins(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), "http://client.example.test")
+	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), config.Config{AllowedOrigins: []string{"http://client.example.test"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000})
 	for _, test := range []struct {
 		origin string
 		status int
