@@ -1,18 +1,18 @@
-import Button from "../../components/UI/button/Button/Button";
-import { useAuth } from "../../hooks/useAuth";
-import cls from "./ProfilePage.module.css";
+import Button from '../../components/UI/button/Button/Button';
+import { useAuth } from '../../hooks/useAuth';
+import cls from './ProfilePage.module.css';
 
 const avatarColors = [
-  "#629838",
-  "#4F7CAC",
-  "#9B6B9E",
-  "#C17C4A",
-  "#4D8B8B",
-  "#B05A5A",
+  '#629838',
+  '#4F7CAC',
+  '#9B6B9E',
+  '#C17C4A',
+  '#4D8B8B',
+  '#B05A5A',
 ];
 
 const ProfilePage = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, operation, error } = useAuth();
 
   if (!user) {
     return null;
@@ -37,8 +37,17 @@ const ProfilePage = () => {
         <h1 className={cls.name}>{user.name}</h1>
       </div>
       <div className={cls.actions}>
-        <Button variant="outlined" tone="danger" onClick={logout}>
-          Выйти из аккаунта
+        {error && <p role="alert">{error}</p>}
+        <Button
+          variant="outlined"
+          tone="danger"
+          disabled={operation === 'logout'}
+          onClick={() => {
+            // Rejection is shown through the session error; keep the button usable for retry.
+            void logout().catch(() => {});
+          }}
+        >
+          {operation === 'logout' ? 'Выходим…' : 'Выйти из аккаунта'}
         </Button>
       </div>
     </div>

@@ -197,8 +197,204 @@ async function registerAndLogin(page: Page, request: APIRequestContext) {
   expect(Object.keys(session).sort()).toEqual(['accessToken', 'user']);
   await expect(page).toHaveURL(/\/lists$/);
   await expect(page.getByText('У вас пока нет списков покупок.')).toBeVisible();
-  return session.accessToken;
+  return { accessToken: session.accessToken, email, password };
 }
+
+test('два браузера одного пользователя сохраняют независимые сессии после выхода', async ({
+  page,
+  request,
+  browser,
+}) => {
+  const { email, password } = await registerAndLogin(page, request);
+  await createList(page, 'Общий аккаунт');
+  const otherContext = await browser.newContext({ baseURL: appOrigin });
+  try {
+    const otherPage = await otherContext.newPage();
+    await otherPage.goto('/login');
+    await otherPage.getByLabel('Email', { exact: true }).fill(email);
+    await otherPage.getByLabel('Пароль').fill(password);
+    await otherPage.getByRole('button', { name: 'Войти', exact: true }).click();
+    await expect(otherPage).toHaveURL(/\/lists$/);
+    const firstCookie = (await page.context().cookies()).find(
+      (cookie) => cookie.name === 'refreshToken',
+    );
+    const otherCookie = (await otherContext.cookies()).find(
+      (cookie) => cookie.name === 'refreshToken',
+    );
+    expect(
+      Boolean(
+        firstCookie && otherCookie && firstCookie.value !== otherCookie.value,
+      ),
+    ).toBe(true);
+    expect(otherCookie?.httpOnly).toBe(true);
+    expect(otherCookie?.sameSite).toBe('Lax');
+
+    for (const current of [page, otherPage]) {
+      await current.reload();
+      await expect(
+        current.getByRole('link', { name: 'Общий аккаунт', exact: true }),
+      ).toBeVisible();
+    }
+    await page.goto('/profile');
+    const logout = page.waitForResponse((response) =>
+      response.url().endsWith('/api/logout'),
+    );
+    await page.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+    expect((await logout).status()).toBe(200);
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === 'refreshToken',
+      ),
+    ).toBe(false);
+    await page.goto('/lists');
+    await expect(page).toHaveURL(/\/login$/);
+    await otherPage.reload();
+    await expect(
+      otherPage.getByRole('link', { name: 'Общий аккаунт', exact: true }),
+    ).toBeVisible();
+  } finally {
+    await otherContext.close();
+  }
+});
+
+test('вкладки с общей cookie согласуют refresh и выход во время задержанного refresh', async ({
+  page,
+  request,
+}) => {
+  await registerAndLogin(page, request);
+  await createList(page, 'Общие вкладки');
+  const sibling = await page.context().newPage();
+  try {
+    await sibling.goto('/lists');
+    await expect(
+      sibling.getByRole('link', { name: 'Общие вкладки', exact: true }),
+    ).toBeVisible();
+    const refreshStatuses: number[] = [];
+    const observeRefresh = (response: import('@playwright/test').Response) => {
+      if (response.url().endsWith('/api/refresh'))
+        refreshStatuses.push(response.status());
+    };
+    page.on('response', observeRefresh);
+    sibling.on('response', observeRefresh);
+    await Promise.all([page.reload(), sibling.reload()]);
+    for (const current of [page, sibling]) {
+      await expect(
+        current.getByRole('link', { name: 'Общие вкладки', exact: true }),
+      ).toBeVisible();
+    }
+    expect(refreshStatuses).toEqual([200, 200]);
+    await sibling.goto('/profile');
+    await expect(
+      sibling.getByRole('button', { name: 'Выйти из аккаунта' }),
+    ).toBeVisible();
+
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const refreshing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    await page.route('**/api/refresh', async (route) => {
+      const response = await route.fetch();
+      started();
+      await held;
+      await route.fulfill({ response });
+    });
+    let logoutRequests = 0;
+    sibling.on('request', (request) => {
+      if (request.url().endsWith('/api/logout')) logoutRequests++;
+    });
+    const reloading = page.reload();
+    try {
+      await refreshing;
+      await sibling.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+      await expect(
+        sibling.getByRole('button', { name: 'Выходим…' }),
+      ).toBeDisabled();
+      expect(logoutRequests).toBe(0);
+    } finally {
+      release();
+    }
+    await reloading;
+    await expect(sibling).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login$/);
+    expect(logoutRequests).toBe(1);
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === 'refreshToken',
+      ),
+    ).toBe(false);
+    // Persistent browser state contains only public change markers.
+    const persistent = await page.evaluate(() => ({
+      local: { ...localStorage },
+      session: { ...sessionStorage },
+    }));
+    expect(Object.keys(persistent.local)).toEqual([
+      'shopping-manager.session-revision',
+    ]);
+    expect(persistent.session).toEqual({});
+    expect(
+      JSON.parse(persistent.local['shopping-manager.session-revision']).kind,
+    ).toBe('logout');
+    await Promise.all([page.reload(), sibling.reload()]);
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(sibling).toHaveURL(/\/login$/);
+  } finally {
+    await sibling.close();
+  }
+});
+
+test('смена аккаунта в одной вкладке сбрасывает списки и открытую форму другой', async ({
+  page,
+  request,
+  browser,
+}) => {
+  await registerAndLogin(page, request);
+  await createList(page, 'Первый аккаунт');
+  const sibling = await page.context().newPage();
+  const otherContext = await browser.newContext({ baseURL: appOrigin });
+  try {
+    const otherPage = await otherContext.newPage();
+    const second = await registerAndLogin(otherPage, request);
+    await createList(otherPage, 'Второй аккаунт');
+    await sibling.goto('/lists');
+    await expect(
+      sibling.getByRole('link', { name: 'Первый аккаунт', exact: true }),
+    ).toBeVisible();
+    await sibling
+      .getByRole('button', { name: 'Создать список', exact: true })
+      .click();
+    await sibling
+      .getByRole('dialog')
+      .getByLabel('Название списка')
+      .fill('Личный черновик');
+    await page.goto('/login');
+    await page.getByLabel('Email', { exact: true }).fill(second.email);
+    await page.getByLabel('Пароль').fill(second.password);
+    await page.getByRole('button', { name: 'Войти', exact: true }).click();
+    for (const current of [page, sibling]) {
+      await expect(current).toHaveURL(/\/lists$/);
+      await expect(
+        current.getByRole('link', { name: 'Второй аккаунт', exact: true }),
+      ).toBeVisible();
+      await expect(
+        current.getByRole('link', { name: 'Первый аккаунт', exact: true }),
+      ).toHaveCount(0);
+    }
+    await expect(sibling.getByRole('dialog')).toHaveCount(0);
+    await sibling
+      .getByRole('button', { name: 'Создать список', exact: true })
+      .click();
+    await expect(
+      sibling.getByRole('dialog').getByLabel('Название списка'),
+    ).toHaveValue('');
+  } finally {
+    await sibling.close();
+    await otherContext.close();
+  }
+});
 
 async function createList(page: Page, name: string) {
   await page
@@ -265,7 +461,7 @@ test('два пользователя: несколько списков, CRUD, 
   browser,
   request,
 }) => {
-  const token = await registerAndLogin(page, request);
+  const { accessToken: token } = await registerAndLogin(page, request);
   const home = await createList(page, 'Дом');
   const trip = await createList(page, 'Поездка');
   await openList(page, home);
@@ -355,7 +551,10 @@ test('два пользователя: несколько списков, CRUD, 
   const otherContext = await browser.newContext({ baseURL: appOrigin });
   try {
     const otherPage = await otherContext.newPage();
-    const otherToken = await registerAndLogin(otherPage, request);
+    const { accessToken: otherToken } = await registerAndLogin(
+      otherPage,
+      request,
+    );
     const own = await createList(otherPage, 'Личный список');
     await openList(otherPage, own);
     await createItem(otherPage, own.id, 'Чай', '1');
@@ -436,7 +635,7 @@ test('потерянный ответ POST повторяется с прежн�
   page,
   request,
 }) => {
-  const token = await registerAndLogin(page, request);
+  const { accessToken: token } = await registerAndLogin(page, request);
   const list = await createList(page, 'Проверка повторов');
   await openList(page, list);
   const endpoint = `**/api/shopping-lists/${list.id}/items`;

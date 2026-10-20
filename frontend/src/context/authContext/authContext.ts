@@ -1,12 +1,10 @@
-import { createContext } from "react";
+import { createContext } from 'react';
 
-import type { LoginRequest, RegistrationRequest } from "../../models/auth.ts";
+import type { LoginRequest, RegistrationRequest } from '../../models/auth.ts';
 
-import type { User } from "../../models/user.ts";
+import type { SessionSnapshot } from '../../services/session';
 
-export interface AuthContextValue {
-  user: User | null;
-
+export interface AuthContextValue extends SessionSnapshot {
   isAuthenticated: boolean;
 
   isLoading: boolean;

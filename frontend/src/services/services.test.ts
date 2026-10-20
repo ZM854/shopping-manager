@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiFetch } from './api';
+import { requestJSON } from './http';
 import ProductService from './productService';
 import { authService } from './authService';
 import {
@@ -8,9 +9,9 @@ import {
   setAccessToken,
 } from './tokenStorage';
 vi.mock('./api', () => ({ apiFetch: vi.fn() }));
-const request = vi.mocked(apiFetch);
+vi.mock('./http', () => ({ requestJSON: vi.fn() }));
 beforeEach(() => {
-  request.mockReset();
+  vi.resetAllMocks();
   clearAccessToken();
 });
 const product = { name: 'Молоко', quantity: 1.5, unit: 'л' };
@@ -54,7 +55,6 @@ describe('Сервисы текущего API', () => {
       options: {
         method: 'POST',
         body: JSON.stringify(login),
-        skipRefresh: true,
       },
     },
     {
@@ -63,13 +63,12 @@ describe('Сервисы текущего API', () => {
       options: {
         method: 'POST',
         body: JSON.stringify({ ...login, name: 'Имя' }),
-        skipRefresh: true,
       },
     },
     {
       run: () => authService.refresh(),
       path: '/refresh',
-      options: { method: 'POST', skipRefresh: true },
+      options: { method: 'POST' },
     },
     {
       run: () => authService.activate('test-token'),
@@ -77,7 +76,6 @@ describe('Сервисы текущего API', () => {
       options: {
         method: 'POST',
         body: JSON.stringify({ token: 'test-token' }),
-        skipRefresh: true,
       },
     },
     {
@@ -86,7 +84,6 @@ describe('Сервисы текущего API', () => {
       options: {
         method: 'POST',
         body: JSON.stringify({ email: login.email }),
-        skipRefresh: true,
       },
     },
     {
@@ -97,6 +94,9 @@ describe('Сервисы текущего API', () => {
   ])(
     '$path $options.method сохраняет контракт и ошибки',
     async ({ run, path, options }) => {
+      const request = vi.mocked(
+        path.startsWith('/products') ? apiFetch : requestJSON,
+      );
       request.mockResolvedValue({ result: 'test' });
       await expect(run()).resolves.toEqual({ result: 'test' });
       if (options) expect(request).toHaveBeenCalledWith(path, options);

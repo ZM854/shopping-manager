@@ -1,11 +1,11 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export default function RequireAuth() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, status, scope } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || status === 'error') {
     return null;
   }
 
@@ -13,5 +13,5 @@ export default function RequireAuth() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  return <Outlet />;
+  return <Outlet key={scope} />;
 }

@@ -1,0 +1,9 @@
+.notice {
+  max-width: 36rem;
+  margin: var(--space-6) auto;
+  padding: var(--space-4);
+}
+
+.notice p {
+  margin-bottom: var(--space-4);
+}

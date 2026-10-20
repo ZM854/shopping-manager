@@ -11,7 +11,7 @@ describe('OpenAPI списков', () => {
   it('имеет валидную структуру и не зависит от внешних файлов', async () => {
     const parser = new SwaggerParser();
     const document = await parser.validate(contractPath);
-    expect(document.info.version).toBe('0.4.0');
+    expect(document.info.version).toBe('0.5.0');
     expect(parser.$refs.paths()).toHaveLength(1);
   });
 
@@ -46,11 +46,16 @@ describe('OpenAPI списков', () => {
     ]) {
       expect(document.paths?.[path]).toBeDefined();
     }
-    for (const path of ['/refresh', '/logout']) {
-      expect(document.paths?.[path]?.post?.security).toEqual([
-        { refreshCookie: [] },
-      ]);
-    }
+    expect(document.paths?.['/refresh']?.post?.security).toEqual([
+      { refreshCookie: [] },
+    ]);
+    expect(document.paths?.['/logout']?.post?.security).toEqual([
+      {},
+      { refreshCookie: [] },
+    ]);
+    expect(
+      document.paths?.['/logout']?.post?.responses?.['401'],
+    ).toBeUndefined();
     expect(document.paths?.['/activate/{link}']).toBeUndefined();
     expect(
       document.paths?.['/activation']?.post?.responses?.['204'],

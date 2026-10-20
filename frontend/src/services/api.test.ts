@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import { ApiError, apiFetch } from './api';
+import { authService } from './authService';
+import { sessionCoordinator } from './session';
 import {
   clearAccessToken,
   getAccessToken,
@@ -11,12 +13,106 @@ vi.mock('../shared/logger', () => ({
 }));
 const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => {
+  sessionCoordinator.dispose();
+  localStorage.clear();
   clearAccessToken();
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
 
 describe('API-клиент', () => {
+  it('не возвращает старое тело, если аккаунт сменился во время чтения JSON', async () => {
+    let resolveBody!: (body: unknown) => void;
+    const pending = new Promise((resolve) => {
+      resolveBody = resolve;
+    });
+    const response = Response.json([]);
+    const read = vi.spyOn(response, 'json').mockReturnValue(pending);
+    fetchMock.mockResolvedValueOnce(response);
+    const old = apiFetch('/shopping-lists');
+    const rejected = expect(old).rejects.toThrow('Сессия изменилась');
+    await waitFor(() => expect(read).toHaveBeenCalledOnce());
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ accessToken: 'other', user: { id: 2 } }),
+    );
+    await sessionCoordinator.login({
+      email: 'other@example.test',
+      password: 'password123',
+    });
+    resolveBody([{ id: '1', name: 'Приватный список первого' }]);
+    await rejected;
+    expect(getAccessToken()).toBe('other');
+  });
+  it('поздний 401 использует уже обновлённый access без второй ротации', async () => {
+    setAccessToken('old');
+    let resolveOld!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveOld = resolve;
+    });
+    fetchMock.mockReturnValueOnce(pending);
+    const request = apiFetch('/shopping-lists');
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ accessToken: 'new', user: { id: 1 } }),
+    );
+    await sessionCoordinator.refresh();
+    fetchMock.mockResolvedValueOnce(Response.json([]));
+    resolveOld(new Response(null, { status: 401 }));
+    await expect(request).resolves.toEqual([]);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/refresh')),
+    ).toHaveLength(1);
+  });
+  it.each([
+    () =>
+      authService.login({
+        email: 'user@example.test',
+        password: 'password123',
+      }),
+    () =>
+      authService.register({
+        name: 'Имя',
+        email: 'user@example.test',
+        password: 'password123',
+      }),
+    () => authService.activate('activation-token'),
+    () => authService.resendActivation('user@example.test'),
+  ])('отказ публичной auth-операции не запускает refresh', async (run) => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    await expect(run()).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).not.toBe('/api/refresh');
+  });
+  it('объединяет начальный refresh и refresh после 401 в одной вкладке', async () => {
+    setAccessToken('old');
+    let resolveRefresh!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    fetchMock.mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/refresh')) return pending;
+      if (new Headers(options?.headers).get('Authorization') === 'Bearer old')
+        return new Response(null, { status: 401 });
+      return Response.json([]);
+    });
+    const initial = sessionCoordinator.initialize();
+    const strictModeRepeat = sessionCoordinator.initialize();
+    const resource = apiFetch('/shopping-lists');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const session = { accessToken: 'new', user: { id: 42 } };
+    resolveRefresh(Response.json(session));
+    await expect(initial).resolves.toBeUndefined();
+    await expect(strictModeRepeat).resolves.toBeUndefined();
+    await expect(resource).resolves.toEqual([]);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/refresh')),
+    ).toHaveLength(1);
+  });
+  it('не запускает refresh при отказе logout', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    await expect(authService.logout()).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/logout');
+  });
   it('сохраняет статус, код и поля ошибок нового API', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json(
@@ -69,7 +165,9 @@ describe('API-клиент', () => {
   it('повтор после refresh сохраняет Idempotency-Key и decimal-строку', async () => {
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
-      .mockResolvedValueOnce(Response.json({ accessToken: 'new' }))
+      .mockResolvedValueOnce(
+        Response.json({ accessToken: 'new', user: { id: 1 } }),
+      )
       .mockResolvedValueOnce(
         Response.json({ id: '9007199254740993', quantity: '999999999.999' }),
       );
@@ -166,21 +264,25 @@ describe('API-клиент', () => {
     expect(getAccessToken()).toBeNull();
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
-      .mockResolvedValueOnce(Response.json({ accessToken: 'new' }))
+      .mockResolvedValueOnce(
+        Response.json({ accessToken: 'new', user: { id: 1 } }),
+      )
       .mockResolvedValueOnce(Response.json([]));
     await expect(apiFetch('/products')).resolves.toEqual([]);
     expect(getAccessToken()).toBe('new');
   });
-  it('не зацикливается при повторном 401 и учитывает skipRefresh', async () => {
+  it('не зацикливается при повторном 401; прямой auth-запрос не повторяется', async () => {
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
-      .mockResolvedValueOnce(Response.json({ accessToken: 'new' }))
+      .mockResolvedValueOnce(
+        Response.json({ accessToken: 'new', user: { id: 1 } }),
+      )
       .mockResolvedValueOnce(new Response(null, { status: 401 }));
     await expect(apiFetch('/products')).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(3);
     fetchMock.mockClear();
     fetchMock.mockResolvedValue(new Response(null, { status: 401 }));
-    await expect(apiFetch('/refresh', { skipRefresh: true })).rejects.toThrow();
+    await expect(authService.refresh()).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
