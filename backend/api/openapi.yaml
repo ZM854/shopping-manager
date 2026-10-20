@@ -1,10 +1,17 @@
 openapi: 3.0.3
 info:
   title: Shopping Manager API
-  version: 0.2.0
+  version: 0.6.0
   description: >-
     HTTP API авторизации и личных списков покупок. Базовый префикс — /api.
     Операции со списками требуют Bearer access token.
+    Регистрация требует подтверждения почты и не создаёт сессию.
+    Refresh передаётся только HttpOnly-cookie, access — в JSON.
+    Для refresh/logout обязателен Origin из настроенного списка, в том числе для CLI.
+    Любой запрос с посторонним, null или неоднозначным Origin даёт 403 origin_forbidden.
+    Без Origin остальные маршруты доступны. JSON-тела registration/login/activation/resend ограничены 4096 байтами.
+    Login, registration и activation/resend ограничены по IP; отказ — 429 rate_limited
+    с Retry-After в секундах. По умолчанию 30/минуту, 10/час и 10/10 минут соответственно.
     Тело запроса к спискам — один JSON-объект до 65536 байт;
     неизвестные и повторяющиеся поля запрещены, имена регистрозависимы.
 servers:
@@ -18,7 +25,8 @@ paths:
           description: Сервер работает; тело отсутствует
   /registration:
     post:
-      summary: Регистрация
+      summary: Регистрация без выдачи токенов
+      description: Создаёт неподтверждённый аккаунт. Для входа требуется активация по письму. Set-Cookie отсутствует.
       requestBody:
         required: true
         content:
@@ -27,17 +35,32 @@ paths:
               type: object
               required: [name, email, password]
               properties:
-                name: {type: string}
-                email: {type: string, format: email}
-                password: {type: string, minLength: 6, maxLength: 72}
+                name: {$ref: '#/components/schemas/UserName'}
+                email: {$ref: '#/components/schemas/Email'}
+                password: {type: string, minLength: 6, maxLength: 72, description: От 6 Unicode-кодовых точек; не более 72 байт UTF-8. Пробелы и регистр сохраняются.}
       responses:
-        '201': {description: Пользователь зарегистрирован}
-        '400': {description: Некорректное тело запроса}
-        '409': {description: Пользователь уже существует}
-        '500': {description: Ошибка сервера}
+        '201':
+          description: Аккаунт создан; требуется подтверждение почты
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RegistrationResponse'}
+        '400': {$ref: '#/components/responses/AuthBadRequest'}
+        '403': {$ref: '#/components/responses/OriginForbidden'}
+        '413': {$ref: '#/components/responses/ActivationBodyTooLarge'}
+        '429': {$ref: '#/components/responses/AuthRateLimited'}
+        '409':
+          description: user_already_exists — пользователь с таким email уже существует
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503': {$ref: '#/components/responses/ActivationDeliveryFailed'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /login:
     post:
-      summary: Вход
+      summary: Вход после подтверждения почты
+      description: Каждый успешный вход создаёт отдельную сессию с абсолютным сроком JWT_REFRESH_TTL (по умолчанию 30 дней).
       requestBody:
         required: true
         content:
@@ -46,53 +69,135 @@ paths:
               type: object
               required: [email, password]
               properties:
-                email: {type: string, format: email}
-                password: {type: string}
+                email: {$ref: '#/components/schemas/Email'}
+                password: {type: string, minLength: 1, maxLength: 72, description: Не более 72 байт UTF-8; новый минимум длины при входе не применяется.}
       responses:
-        '200': {description: Успешный вход}
-        '400': {description: Некорректное тело запроса}
-        '401': {description: Неверные учётные данные}
-        '403': {description: Почта не активирована}
-        '500': {description: Ошибка сервера}
+        '413': {$ref: '#/components/responses/ActivationBodyTooLarge'}
+        '429': {$ref: '#/components/responses/AuthRateLimited'}
+        '200': {$ref: '#/components/responses/AuthSuccess'}
+        '400': {$ref: '#/components/responses/AuthBadRequest'}
+        '401':
+          description: invalid_credentials — неверный email или пароль
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403': {$ref: '#/components/responses/EmailNotVerified'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /logout:
     post:
-      summary: Выход
-      security: [{refreshCookie: []}]
+      parameters: [{$ref: '#/components/parameters/AuthOrigin'}]
+      summary: Выход из текущей сессии
+      description: >-
+        Отзывает только сессию, совпадающую по пользователю, sid и хешу текущего
+        refresh. Старый токен не отзывает уже обновлённую сессию или другой браузер.
+        Отсутствующая, недействительная, истёкшая или уже отозванная cookie даёт 200.
+        Ошибка БД даёт 500 без очистки cookie. Access действует до exp.
+      security: [{}, {refreshCookie: []}]
       responses:
-        '200': {description: Выход выполнен}
-        '401': {description: Cookie отсутствует}
-        '500': {description: Ошибка сервера}
+        '403': {$ref: '#/components/responses/OriginForbidden'}
+        '200':
+          description: Выход выполнен; refresh cookie очищена
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+            Set-Cookie:
+              description: Очистка refreshToken с теми же Path=/, HttpOnly, SameSite=Lax, Secure и без Domain, что при выдаче
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: {type: string}
+        '500': {$ref: '#/components/responses/InternalError'}
   /refresh:
     post:
-      summary: Обновление токенов
+      parameters: [{$ref: '#/components/parameters/AuthOrigin'}]
+      summary: Обновление токенов подтверждённого пользователя
+      description: >-
+        Атомарно заменяет refresh только действующей сессии подтверждённого
+        аккаунта; абсолютный срок не продлевается. Из двух запросов с одной
+        cookie успешен один. Старый/повторный токен, удалённая или истёкшая
+        сессия дают 401 без Set-Cookie; ошибка не стирает новую cookie.
+        Если успешный ответ потерян, требуется повторный вход. Неподтверждённый
+        пользователь получает 403. Отсутствующая сессия никогда не создаётся.
       security: [{refreshCookie: []}]
       responses:
-        '200': {description: Токены обновлены}
-        '401': {description: Cookie отсутствует или токен недействителен}
-  /activate/{link}:
-    get:
-      summary: Активация почты по ссылке из письма
-      parameters:
-        - name: link
-          in: path
-          required: true
-          schema: {type: string}
+        '200': {$ref: '#/components/responses/AuthSuccess'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/EmailNotVerified'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /activation:
+    post:
+      summary: Подтверждение почты по одноразовому токену
+      description: >-
+        Письмо открывает frontend /activation/{token}; активация происходит
+        только после нажатия кнопки. Токен действует 24 часа по умолчанию.
+        Пустые, истёкшие, использованные и заменённые токены отвергаются.
+        Тело JSON до 4096 байт. Сессия не создаётся.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  format: uuid
+                  minLength: 36
+                  maxLength: 36
+                  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
       responses:
-        '302':
-          description: Перенаправление на страницу входа frontend
+        '204': {description: Почта подтверждена; тело отсутствует}
+        '400':
+          description: invalid_activation или validation_failed — недействительный токен или JSON
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413': {$ref: '#/components/responses/ActivationBodyTooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /activation/resend:
+    post:
+      summary: Повторная отправка подтверждения
+      description: >-
+        Для неизвестного или уже подтверждённого email возвращается нейтральный
+        202 без отправки письма. Для pending-аккаунта атомарно заменяет токен;
+        предыдущая ссылка перестаёт действовать. Интервал — 60 секунд по умолчанию,
+        включая неудачную попытку SMTP. Тело JSON до 4096 байт.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {$ref: '#/components/schemas/Email'}
+      responses:
+        '202':
+          description: Запрос обработан; ответ не подтверждает существование аккаунта
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: {type: string}
+        '400': {$ref: '#/components/responses/AuthBadRequest'}
+        '413': {$ref: '#/components/responses/ActivationBodyTooLarge'}
+        '429':
+          description: activation_cooldown — повтор слишком рано; rate_limited — исчерпан лимит IP
           headers:
-            Location:
-              schema: {type: string}
-        '400': {description: Недействительная ссылка}
-        '500': {description: Ошибка сервера}
-  /users:
-    get:
-      summary: Получить список пользователей
-      deprecated: true
-      description: Маршрут доступен без авторизации.
-      responses:
-        '200': {description: Список пользователей}
-        '500': {description: Ошибка сервера}
+            Retry-After:
+              description: Через сколько секунд можно повторить
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503': {$ref: '#/components/responses/ActivationDeliveryFailed'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /shopping-lists:
     get:
       security: [{bearerAuth: []}]
@@ -296,6 +401,12 @@ components:
       in: cookie
       name: refreshToken
   parameters:
+    AuthOrigin:
+      name: Origin
+      in: header
+      required: true
+      schema: {type: string}
+      description: Точный origin из конфигурации сервера; отсутствие, null и посторонний origin дают 403 origin_forbidden без изменения cookie.
     ListId:
       name: listId
       in: path
@@ -322,6 +433,38 @@ components:
         maxLength: 128
         pattern: '^[A-Za-z0-9_-]{16,128}$'
   schemas:
+    RegistrationResponse:
+      type: object
+      additionalProperties: false
+      required: [activationRequired]
+      properties:
+        activationRequired: {type: boolean, enum: [true]}
+    UserDTO:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, isEmailVerified]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        name: {type: string}
+        email: {type: string, format: email}
+        isEmailVerified: {type: boolean}
+    UserName:
+      type: string
+      minLength: 2
+      maxLength: 20
+      description: После обрезки Unicode-пробелов по краям; длина в Unicode-кодовых точках. Управляющие символы запрещены.
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+      description: ASCII email до 254 байт, локальная часть до 64. Unicode-пробелы по краям обрезаются; весь адрес приводится к нижнему регистру.
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [user, accessToken]
+      properties:
+        user: {$ref: '#/components/schemas/UserDTO'}
+        accessToken: {type: string}
     Id:
       type: string
       minLength: 1
@@ -412,6 +555,55 @@ components:
           type: object
           additionalProperties: {type: string}
   responses:
+    OriginForbidden:
+      description: origin_forbidden — источник запроса не разрешён; cookie не меняется
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    AuthRateLimited:
+      description: rate_limited — исчерпан лимит запросов IP
+      headers:
+        Retry-After: {description: Через сколько секунд можно повторить, schema: {type: integer, minimum: 1}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ActivationBodyTooLarge:
+      description: body_too_large — JSON превышает 4096 байт
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ActivationDeliveryFailed:
+      description: >-
+        activation_delivery_failed — SMTP не принял письмо. Аккаунт остаётся
+        неподтверждённым; после регистрации он уже создан. Повторять следует
+        /activation/resend после паузы, а не регистрацию. Старый пароль не меняется.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    AuthSuccess:
+      description: Безопасные данные пользователя и access; refresh только в cookie
+      headers:
+        Cache-Control: {schema: {type: string, enum: [no-store]}}
+        Set-Cookie:
+          description: >-
+            refreshToken; HttpOnly; Path=/; SameSite=Lax; без Domain.
+            Max-Age/Expires соответствуют оставшемуся сроку сессии.
+            Secure при HTTPS; HTTP разрешён только с APP_ENV=dev.
+            Значение отсутствует в JSON.
+          schema: {type: string}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AuthResponse'}
+    AuthBadRequest:
+      description: validation_failed — некорректное тело запроса
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    EmailNotVerified:
+      description: email_not_verified — требуется подтверждение почты; origin_forbidden — источник запроса не разрешён, сессия при этом не отзывается
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
     ListResult:
       description: Метаданные списка
       content:

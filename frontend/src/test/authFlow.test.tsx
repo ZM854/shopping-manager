@@ -50,6 +50,48 @@ async function fillAuth(registration = false) {
 }
 
 describe('AuthProvider, HTTP и формы', () => {
+  it('401 начального refresh во время регистрации не превращает успешный ответ в ошибку', async () => {
+    let finishRefresh!: (response: Response) => void;
+    let finishRegistration!: (response: Response) => void;
+    const refresh = new Promise<Response>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const registration = new Promise<Response>((resolve) => {
+      finishRegistration = resolve;
+    });
+    fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith('/refresh') ? refresh : registration,
+    );
+    renderAuth('/registration');
+    const user = await fillAuth(true);
+    await user.click(
+      screen.getByRole('button', { name: 'Зарегистрироваться' }),
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).endsWith('/registration'),
+        ),
+      ).toBe(true),
+    );
+    finishRefresh(
+      Response.json(
+        { code: 'unauthorized', message: 'Нет сессии' },
+        { status: 401 },
+      ),
+    );
+    await waitFor(() =>
+      expect(sessionCoordinator.getSnapshot().status).toBe('guest'),
+    );
+    finishRegistration(
+      Response.json({ activationRequired: true }, { status: 201 }),
+    );
+    expect(await screen.findByText(/Мы отправили письмо/)).toHaveTextContent(
+      'user@example.test',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(getAccessToken()).toBeNull();
+  });
   it.each([
     {
       path: '/login',
@@ -187,7 +229,7 @@ describe('AuthProvider, HTTP и формы', () => {
     resolveLogin(
       Response.json({
         user: {
-          id: 1,
+          id: '1',
           name: 'Проверка',
           email: 'user@example.test',
           isEmailVerified: true,

@@ -203,6 +203,36 @@ async function registerAndLogin(page: Page, request: APIRequestContext) {
   return { accessToken: session.accessToken, email, password };
 }
 
+test('запросы с отсутствующим или посторонним Origin не меняют cookie и сессию', async ({
+  page,
+  request,
+}) => {
+  await registerAndLogin(page, request);
+  const cookieBefore = (await page.context().cookies()).find(
+    (cookie) => cookie.name === 'refreshToken',
+  );
+  expect(Boolean(cookieBefore)).toBe(true);
+  for (const path of ['/refresh', '/logout']) {
+    for (const origin of [undefined, 'null', 'https://foreign.example.test']) {
+      const response = await page.request.post(`/api${path}`, {
+        headers: origin ? { Origin: origin } : {},
+      });
+      expect(response.status()).toBe(403);
+      expect((await response.json()).code).toBe('origin_forbidden');
+      expect(response.headers()['set-cookie']).toBeUndefined();
+      const cookieAfter = (await page.context().cookies()).find(
+        (cookie) => cookie.name === 'refreshToken',
+      );
+      expect(
+        Boolean(cookieAfter && cookieAfter.value === cookieBefore?.value),
+      ).toBe(true);
+    }
+  }
+  await page.reload();
+  await expect(page).toHaveURL(/\/lists$/);
+  await expect(page.getByText('У вас пока нет списков покупок.')).toBeVisible();
+});
+
 test('два браузера одного пользователя сохраняют независимые сессии после выхода', async ({
   page,
   request,

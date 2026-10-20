@@ -63,6 +63,19 @@ function notify(kind: SessionEvent['kind']) {
 }
 
 describe('Поколения сессии', () => {
+  it('поздняя регистрация после входа другим аккаунтом не меняет сессию и не сообщает успех старой форме', async () => {
+    const pending = deferred<{ activationRequired: true }>();
+    transport.register.mockReturnValueOnce(pending.promise);
+    const registering = coordinator.register({ ...credentials, name: 'Имя' });
+    const rejected =
+      expect(registering).rejects.toBeInstanceOf(StaleSessionError);
+    transport.login.mockResolvedValueOnce(result);
+    await coordinator.login(credentials);
+    pending.resolve({ activationRequired: true });
+    await rejected;
+    expect(coordinator.getSnapshot().user).toEqual(result.user);
+    expect(getAccessToken()).toBe(result.accessToken);
+  });
   it('ошибка Origin не означает отзыв сессии и сохраняет данные для повтора', async () => {
     transport.refresh.mockResolvedValueOnce(result);
     await coordinator.initialize();

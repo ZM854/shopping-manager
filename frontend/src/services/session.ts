@@ -36,6 +36,8 @@ export class StaleSessionError extends Error {
 
 export class SessionCoordinator {
   private generation = 0;
+  // Unlike request generations, this changes only when identity or user intent changes.
+  private identityVersion = 0;
   private snapshot: SessionSnapshot = {
     status: 'checking',
     user: null,
@@ -78,6 +80,7 @@ export class SessionCoordinator {
   dispose = () => {
     this.disconnect?.();
     this.disconnect = null;
+    this.identityVersion++;
     this.generation++;
     this.refreshRequest = null;
     this.logoutRequest = null;
@@ -100,6 +103,7 @@ export class SessionCoordinator {
   }
 
   private guest() {
+    if (this.snapshot.user) this.identityVersion++;
     this.generation++;
     this.update(
       {
@@ -116,6 +120,7 @@ export class SessionCoordinator {
   private accept(result: AuthResponse) {
     if (!result.user || !result.accessToken)
       throw new Error('Некорректный ответ авторизации');
+    if (this.snapshot.user?.id !== result.user.id) this.identityVersion++;
     const scope =
       this.snapshot.scope +
       (this.snapshot.user && this.snapshot.user.id !== result.user.id ? 1 : 0);
@@ -200,6 +205,7 @@ export class SessionCoordinator {
   };
 
   login = (data: LoginRequest): Promise<void> => {
+    this.identityVersion++;
     const generation = ++this.generation;
     this.update(
       {
@@ -227,14 +233,20 @@ export class SessionCoordinator {
   };
 
   register = async (data: RegistrationRequest): Promise<void> => {
-    const generation = this.generation;
+    const identity = this.identityVersion;
+    const revision = this.sync.current()?.id;
     await this.transport.register(data);
-    this.guard(generation);
+    if (
+      identity !== this.identityVersion ||
+      revision !== this.sync.current()?.id
+    )
+      throw new StaleSessionError();
   };
 
   logout = (): Promise<void> => {
     if (this.snapshot.operation === 'logout' && this.logoutRequest)
       return this.logoutRequest;
+    this.identityVersion++;
     const generation = ++this.generation;
     this.update({ ...this.snapshot, operation: 'logout', error: null });
     const promise = this.sync
@@ -265,6 +277,7 @@ export class SessionCoordinator {
 
   private receive = (event: SessionEvent) => {
     if (event.id === this.lastRevision || this.snapshot.operation) return;
+    this.identityVersion++;
     this.lastRevision = event.id;
     if (event.kind === 'logout') {
       this.guest();

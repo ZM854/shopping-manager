@@ -23,6 +23,8 @@ if ($Action -in @('e2e', 'e2e-up', 'e2e-stop')) {
     & docker @e2eComposeArgs up --build -d --wait --wait-timeout 300
     if ($LASTEXITCODE -ne 0 -or $Action -eq 'e2e-up') { exit $LASTEXITCODE }
     & npm.cmd --prefix (Join-Path $projectRoot 'frontend') run test:e2e
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & node (Join-Path $PSScriptRoot 'check-auth-logs.mjs')
     exit $LASTEXITCODE
 }
 
