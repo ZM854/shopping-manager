@@ -11,8 +11,13 @@ import ProfilePage from '../pages/ProfilePage/ProfilePage';
 import LoginPage from '../pages/LoginPage/LoginPage';
 import RegistrationPage from '../pages/RegistrationPage/RegistrationPage';
 import ActivationPage from '../pages/ActivationPage/ActivationPage';
+import SharedShoppingListPage from '../pages/SharedShoppingListPage/SharedShoppingListPage';
 
 export const router = createBrowserRouter([
+  {
+    path: '/share',
+    element: <SharedShoppingListPage />,
+  },
   {
     path: '/login',
     element: <LoginPage />,

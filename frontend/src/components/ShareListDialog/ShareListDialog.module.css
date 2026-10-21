@@ -1,0 +1,10 @@
+.content,
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.content {
+  padding: var(--space-6);
+  background: var(--surface);
+}

@@ -39,3 +39,16 @@ export type ShoppingError = {
   message: string;
   fieldErrors?: Record<string, string>;
 };
+
+export type ShoppingListShare = {
+  id: string;
+  createdAt: string;
+  preserveMarks: boolean;
+};
+
+export type CreateShoppingListShareRequest = {
+  token: string;
+  preserveMarks: boolean;
+};
+
+export type ImportShoppingListShareRequest = { token: string };

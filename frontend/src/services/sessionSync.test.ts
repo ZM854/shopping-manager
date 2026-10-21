@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSessionSync } from './sessionSync';
+import { SessionCoordinator } from './session';
+import { ApiError } from './http';
 
 const revisionKey = 'shopping-manager.session-revision';
 class TestChannel {
@@ -18,6 +20,55 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Согласование вкладок', () => {
+  it('сохраняет маркер BroadcastChannel до видимости первой записи storage и завершает refresh гостя', async () => {
+    vi.stubGlobal('navigator', {});
+    vi.stubGlobal('BroadcastChannel', TestChannel);
+    const sync = createSessionSync();
+    const user = {
+      id: '1',
+      name: 'Имя',
+      email: 'one@example.test',
+      isEmailVerified: true,
+    };
+    const transport = {
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refresh: vi
+        .fn()
+        .mockRejectedValueOnce(new ApiError(401))
+        .mockResolvedValueOnce({ user, accessToken: 'test-access' }),
+    };
+    const coordinator = new SessionCoordinator(transport, sync);
+    try {
+      await expect(coordinator.initialize()).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(coordinator.getSnapshot().status).toBe('guest');
+      const marker = { id: 'new-login', kind: 'login' };
+      TestChannel.instances[0].onmessage?.(
+        new MessageEvent('message', { data: marker }),
+      );
+      // BC доставлен, а другая вкладка ещё не видит запись storage.
+      expect(localStorage.getItem(revisionKey)).toBeNull();
+      expect(sync.current()).toEqual(marker);
+      localStorage.setItem(revisionKey, JSON.stringify(marker));
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: revisionKey,
+          newValue: JSON.stringify(marker),
+        }),
+      );
+      await vi.waitFor(() =>
+        expect(coordinator.getSnapshot().status).toBe('authenticated'),
+      );
+      expect(coordinator.getSnapshot().user).toEqual(user);
+      expect(transport.refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it('использует одну браузерную блокировку для операций с общей cookie', async () => {
     const request = vi.fn(async (_name: string, run: () => Promise<string>) =>
       run(),

@@ -5,6 +5,16 @@ import { ApiError } from '../services/api';
 import { InputError } from '../shared/shoppingValidation';
 
 describe('Отправка формы', () => {
+  it('показывает отказ браузера без randomUUID и освобождает форму', async () => {
+    vi.stubGlobal('crypto', undefined);
+    const action = vi.fn();
+    const { result } = renderHook(useSubmission);
+    await act(async () => result.current.submit(action));
+    expect(action).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/HTTPS или localhost/);
+    expect(result.current.pending).toBe(false);
+    expect(result.current.retry).toBe(false);
+  });
   it('сохраняет ключ после сетевой ошибки и выдаёт новый для следующего действия', async () => {
     const { result } = renderHook(useSubmission);
     const failed = vi.fn(async () => {

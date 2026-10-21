@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Shopping Manager API
-  version: 0.6.0
+  version: 0.7.0
   description: >-
     HTTP API авторизации и личных списков покупок. Базовый префикс — /api.
     Операции со списками требуют Bearer access token.
@@ -14,6 +14,11 @@ info:
     с Retry-After в секундах. По умолчанию 30/минуту, 10/час и 10/10 минут соответственно.
     Тело запроса к спискам — один JSON-объект до 65536 байт;
     неизвестные и повторяющиеся поля запрещены, имена регистрозависимы.
+    Обмен списками создаёт неизменяемый снимок и независимые личные копии.
+    Frontend-ссылка имеет вид /share#token=<секрет>; секрет передаётся API
+    только в JSON, не в пути или query. Ссылка многоразовая, без срока действия.
+    Импорт отправляется только после подтверждения «Добавить»; открытие страницы,
+    вход, reload и «Отмена» сами по себе не создают копию.
 servers:
   - url: /api
 paths:
@@ -271,6 +276,112 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /shopping-lists/{listId}/shares:
+    parameters:
+      - {$ref: '#/components/parameters/ListId'}
+    post:
+      security: [{bearerAuth: []}]
+      operationId: createShoppingListShare
+      summary: Создать неизменяемый снимок своего списка для обмена
+      description: >-
+        Только владелец исходного списка может создать снимок. user_id берётся
+        из access, поля владельца и содержимое списка в JSON не принимаются.
+        Атомарно сохраняются название и все позиции в порядке их ID, включая
+        точные количества, null и единицы. Пустой список допустим.
+        preserveMarks обязателен: true сохраняет отметки покупки, false
+        сбрасывает их только в снимке. Оригинал и его updatedAt не меняются.
+        Изменение, очистка и удаление оригинала не меняют снимок или копии.
+        token генерируется клиентом один раз на действие; сервер хранит только
+        его SHA-256 хеш. Ответ содержит только метаданные, без token и URL.
+        Новая ссылка требует новых token и Idempotency-Key. После сети/5xx
+        повторяются прежние тело и ключ. Область ключа — пользователь,
+        операция создания снимка и конкретный listId. Повтор минимум 24 часа
+        возвращает исходные 201/DTO без повторного снимка. При повторе
+        проверяется автор снимка; удаление оригинала не мешает вернуть
+        ранее сохранённый результат. Другое тело с тем же ключом даёт
+        409 idempotency_conflict. Занятый token для нового действия даёт
+        409 share_token_conflict без изменения существующего снимка.
+        Тело — один JSON-объект в UTF-8 до 65536 байт, включая запросы
+        без Content-Length. null, неизвестные и дублирующиеся поля запрещены.
+        Все ответы, включая ошибки middleware, имеют Cache-Control: no-store.
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateShoppingListShare'}
+      responses:
+        '201':
+          description: Снимок создан либо возвращён исходный результат того же действия
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShoppingListShare'}
+        '400': {$ref: '#/components/responses/SharingBadRequest'}
+        '401': {$ref: '#/components/responses/SharingUnauthorized'}
+        '403': {$ref: '#/components/responses/SharingOriginForbidden'}
+        '404': {$ref: '#/components/responses/SharingNotFound'}
+        '409': {$ref: '#/components/responses/SharingCreateConflict'}
+        '413': {$ref: '#/components/responses/SharingBodyTooLarge'}
+        '500': {$ref: '#/components/responses/SharingInternalError'}
+  /shopping-list-shares/import:
+    post:
+      security: [{bearerAuth: []}]
+      operationId: importShoppingListShare
+      summary: Добавить независимую личную копию снимка по ссылке
+      description: >-
+        Frontend отправляет POST только после явного подтверждения «Добавить»
+        авторизованным получателем. Вход сам по себе не подтверждает импорт;
+        «Отмена» и открытие страницы не отправляют POST. GET для импорта нет.
+        Право получить снимок даёт token из fragment frontend-ссылки;
+        исходный listId, ID автора и владельца копии не принимаются.
+        Владелец новой копии берётся только из access вызывающего пользователя.
+        Любой авторизованный обладатель ссылки, включая её автора, может
+        получить копию. Публичного просмотра без входа нет.
+        Атомарно создаются новый список и все его позиции из снимка с новыми
+        ID и собственными createdAt/updatedAt. Сохраняются название, порядок,
+        точные количества, null, единицы и зафиксированные в снимке отметки.
+        Пустой снимок создаёт пустой список. Копии редактируются независимо
+        от оригинала, снимка и других копий через обычный shopping API.
+        Область ключа — пользователь и операция импорта, без listId;
+        token входит в хеш тела. Прежний ключ и тело при повторе после
+        сети/5xx или refresh access минимум 24 часа возвращают исходные
+        201/DTO без дубля и без перезаписи изменённой копии. При повторе
+        проверяются владелец и существование результата. Другое тело
+        с тем же ключом даёт 409 idempotency_conflict; удалённый результат
+        именно этой попытки — 409 resource_deleted.
+        Новый Idempotency-Key означает новое подтверждённое добавление
+        и создаёт ещё одну копию по тому же token, даже если прежняя копия
+        существует или удалена. Два подтверждения в разных вкладках с разными
+        ключами создают две копии. Уникальности получатель/снимок нет.
+        Удаление оригинала не мешает импорту из сохранённого снимка.
+        Тело — один JSON-объект в UTF-8 до 65536 байт, включая запросы
+        без Content-Length. null, неизвестные и дублирующиеся поля запрещены.
+        Все ответы, включая ошибки middleware, имеют Cache-Control: no-store.
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ImportShoppingListShare'}
+      responses:
+        '201':
+          description: Независимая копия создана либо возвращён исходный результат того же действия
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShoppingList'}
+        '400': {$ref: '#/components/responses/SharingBadRequest'}
+        '401': {$ref: '#/components/responses/SharingUnauthorized'}
+        '403': {$ref: '#/components/responses/SharingOriginForbidden'}
+        '404': {$ref: '#/components/responses/SharingNotFound'}
+        '409': {$ref: '#/components/responses/SharingImportConflict'}
+        '413': {$ref: '#/components/responses/SharingBodyTooLarge'}
+        '500': {$ref: '#/components/responses/SharingInternalError'}
   /shopping-lists/{listId}/items:
     parameters:
       - {$ref: '#/components/parameters/ListId'}
@@ -391,6 +502,10 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
 components:
+  headers:
+    NoStore:
+      description: Ответ не должен сохраняться в кеше
+      schema: {type: string, enum: [no-store]}
   securitySchemes:
     bearerAuth:
       type: http
@@ -423,10 +538,14 @@ components:
       required: true
       description: >-
         Ключ одного действия, например crypto.randomUUID(). Минимальный срок
-        хранения результата — 24 часа. Область: пользователь и POST-маршрут
-        с конкретным listId. Повтор нормализованного тела возвращает исходные
-        статус 201 и DTO; другое тело — 409. Проверка доступа обязательна
+        хранения результата — 24 часа. Область: пользователь и POST-операция,
+        а при наличии listId также конкретный список. Повтор нормализованного
+        тела с прежним ключом возвращает исходные статус 201 и DTO;
+        другое тело — 409 idempotency_conflict. Проверка доступа обязательна
         и при повторе. После удаления созданного ресурса — 409 resource_deleted.
+        Новый ключ означает новое действие. В частности, новый подтверждённый
+        импорт с новым ключом создаёт ещё одну копию по той же ссылке;
+        удаление результата предыдущего действия этому не мешает.
       schema:
         type: string
         minLength: 16
@@ -509,6 +628,41 @@ components:
         name: {$ref: '#/components/schemas/ListName'}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+    ShareToken:
+      type: string
+      minLength: 43
+      maxLength: 43
+      pattern: '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$'
+      description: >-
+        Секрет ссылки: канонический base64url без padding для 32 случайных байт,
+        созданных на клиенте через crypto.getRandomValues. Последний символ
+        кодирует четыре бита данных, два неиспользованных бита должны быть нулевыми.
+        Пробелы не обрезаются, регистр сохраняется; null запрещён.
+        Хранится только SHA-256 хеш. Передаётся только в JSON запроса,
+        не включается в ответы, журналы, API path/query или browser storage.
+    CreateShoppingListShare:
+      type: object
+      additionalProperties: false
+      required: [token, preserveMarks]
+      properties:
+        token: {$ref: '#/components/schemas/ShareToken'}
+        preserveMarks:
+          type: boolean
+          description: Обязательный выбор автора. true сохраняет отметки, false сбрасывает их в снимке. В UI по умолчанию выключен.
+    ImportShoppingListShare:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: {$ref: '#/components/schemas/ShareToken'}
+    ShoppingListShare:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, preserveMarks]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        createdAt: {type: string, format: date-time}
+        preserveMarks: {type: boolean}
     ShoppingItem:
       type: object
       additionalProperties: false
@@ -555,6 +709,73 @@ components:
           type: object
           additionalProperties: {type: string}
   responses:
+    SharingBadRequest:
+      description: >-
+        invalid_request — некорректный JSON/UTF-8, null, неизвестные или повторяющиеся поля;
+        validation_failed — отсутствующий/некорректный ID, Idempotency-Key или поле тела.
+        Ошибки полей могут передаваться в fieldErrors, без значений секретов.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingUnauthorized:
+      description: unauthorized — требуется действующий Bearer access подтверждённого пользователя
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingOriginForbidden:
+      description: origin_forbidden — посторонний, null или неоднозначный Origin; cookie не меняется. Отсутствие Origin разрешено.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingNotFound:
+      description: not_found — исходный список чужой/отсутствует либо token не соответствует доступному снимку. Ответ не раскрывает автора, внутренний ID или секрет.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingCreateConflict:
+      description: >-
+        idempotency_conflict — прежний ключ использован с другим телом;
+        resource_deleted — созданный этим действием снимок больше не существует;
+        share_token_conflict — token уже занят для другого действия создания снимка.
+        Удаление исходного списка само по себе не даёт resource_deleted для готового снимка.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingImportConflict:
+      description: >-
+        idempotency_conflict — прежний ключ использован с другим token;
+        resource_deleted — копия, созданная именно этим HTTP-действием, удалена.
+        Для нового подтверждённого добавления использовать новый ключ:
+        удаление прежней копии не блокирует импорт по ссылке.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingBodyTooLarge:
+      description: body_too_large — тело превышает 65536 байт, в том числе без Content-Length
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SharingInternalError:
+      description: internal_error — ошибка сервера без SQL, секретов и внутренних деталей; незавершённая операция откатывается целиком
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
     OriginForbidden:
       description: origin_forbidden — источник запроса не разрешён; cookie не меняется
       content:

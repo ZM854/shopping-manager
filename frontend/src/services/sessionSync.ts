@@ -26,6 +26,7 @@ function parseEvent(value: unknown): SessionEvent | null {
 export function createSessionSync(): SessionSync {
   let queue = Promise.resolve();
   let channel: BroadcastChannel | null = null;
+  let observed: SessionEvent | null = null;
   const read = (): SessionEvent | null => {
     try {
       return parseEvent(
@@ -49,9 +50,12 @@ export function createSessionSync(): SessionSync {
       );
       return next;
     },
-    current: read,
+    // BroadcastChannel может опередить видимость первой записи localStorage.
+    // До появления записи используем уже принятое уведомление и тот же маркер.
+    current: () => read() ?? observed,
     announce(kind) {
       const event = { id: crypto.randomUUID(), kind };
+      observed = event;
       // Only a change marker is persistent; no tokens, user or other private data.
       try {
         localStorage.setItem(revisionKey, JSON.stringify(event));
@@ -66,7 +70,10 @@ export function createSessionSync(): SessionSync {
         const event = parseEvent(data);
         if (!event) return;
         const current = read();
-        if (!current || current.id === event.id) receive(event);
+        if (!current || current.id === event.id) {
+          observed = event;
+          receive(event);
+        }
       };
       const onStorage = (event: StorageEvent) => {
         if (event.key !== revisionKey || !event.newValue) return;

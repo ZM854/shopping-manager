@@ -5,6 +5,7 @@ import ProductList from '../../components/ProductList/ProductList';
 import Modal from '../../components/UI/modal/Modal/Modal';
 import Button from '../../components/UI/button/Button/Button';
 import AlertDialog from '../../components/AlertDialog/AlertDialog';
+import ShareListDialog from '../../components/ShareListDialog/ShareListDialog';
 import { useShoppingResource } from '../../hooks/useShoppingResource';
 import { useScaffold } from '../../hooks/useScaffold';
 import { shoppingService } from '../../services/shoppingService';
@@ -30,6 +31,7 @@ function ShoppingListPage({ listId }: { listId: string }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ShoppingItem | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [sharing, setSharing] = useState(false);
   useScaffold({
     topBar: { title: resource.data?.list.name ?? 'Список покупок' },
     fab: null,
@@ -141,6 +143,12 @@ function ShoppingListPage({ listId }: { listId: string }) {
           <div className={cls.actions}>
             <Button
               disabled={resource.pending}
+              onClick={() => setSharing(true)}
+            >
+              Поделиться
+            </Button>
+            <Button
+              disabled={resource.pending}
               onClick={() => {
                 setEditing(null);
                 setFormOpen(true);
@@ -189,6 +197,9 @@ function ShoppingListPage({ listId }: { listId: string }) {
       >
         <ProductForm product={editing} onSave={save} />
       </Modal>
+      {sharing && (
+        <ShareListDialog listId={listId} onClose={() => setSharing(false)} />
+      )}
       <Modal
         isOpen={clearing}
         onClose={() => {

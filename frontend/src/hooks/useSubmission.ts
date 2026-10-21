@@ -22,11 +22,15 @@ export function useSubmission() {
   async function submit(action: (key: string) => Promise<void>) {
     if (busy.current) return;
     busy.current = true;
-    key.current ??= crypto.randomUUID();
     setPending(true);
     setError(null);
     setFieldErrors({});
     try {
+      if (typeof globalThis.crypto?.randomUUID !== 'function')
+        throw new InputError(
+          'Для безопасной отправки откройте приложение по HTTPS или localhost.',
+        );
+      key.current ??= crypto.randomUUID();
       await action(key.current);
       if (active.current) {
         key.current = null;

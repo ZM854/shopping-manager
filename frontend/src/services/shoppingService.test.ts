@@ -12,6 +12,29 @@ beforeEach(() => request.mockReset());
 describe('API нескольких списков', () => {
   it.each([
     {
+      run: () =>
+        service.createShare(
+          list,
+          { token: 'share-secret', preserveMarks: false },
+          key,
+        ),
+      path: `${base}/shares`,
+      options: {
+        method: 'POST',
+        headers: { 'Idempotency-Key': key },
+        body: '{"token":"share-secret","preserveMarks":false}',
+      },
+    },
+    {
+      run: () => service.importShare({ token: 'share-secret' }, key),
+      path: '/shopping-list-shares/import',
+      options: {
+        method: 'POST',
+        headers: { 'Idempotency-Key': key },
+        body: '{"token":"share-secret"}',
+      },
+    },
+    {
       run: () => service.getLists(),
       path: '/shopping-lists',
       options: { signal: undefined },

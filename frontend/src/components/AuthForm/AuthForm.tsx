@@ -18,6 +18,7 @@ export default function AuthForm({
   loading = false,
   error,
   onSubmit,
+  footer,
 }: AuthFormProps) {
   const {
     register,
@@ -91,7 +92,9 @@ export default function AuthForm({
         </form>
 
         <div className={cls.footer}>
-          {isLogin ? (
+          {footer !== undefined ? (
+            footer
+          ) : isLogin ? (
             <>
               Нет аккаунта?
               <Link to="/registration">Зарегистрироваться</Link>

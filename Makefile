@@ -77,6 +77,7 @@ e2e-up: e2e-env
 
 e2e: e2e-up
 	npm --prefix frontend run test:e2e
+	node scripts/check-auth-logs.mjs
 
 e2e-stop: e2e-env
 	docker compose --env-file .env.e2e.local -f compose.e2e.yaml stop

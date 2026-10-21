@@ -5,6 +5,9 @@ import type {
   UpdateShoppingListRequest,
   CreateShoppingItemRequest,
   UpdateShoppingItemRequest,
+  ShoppingListShare,
+  CreateShoppingListShareRequest,
+  ImportShoppingListShareRequest,
 } from '../models/shoppingList';
 import { apiFetch } from './api';
 
@@ -15,6 +18,24 @@ const itemPath = (listId: string, itemId: string) =>
   `${listPath(listId)}/items/${encodeURIComponent(itemId)}`;
 
 export const shoppingService = {
+  createShare: (
+    listId: string,
+    body: CreateShoppingListShareRequest,
+    key: string,
+  ) =>
+    apiFetch<ShoppingListShare>(`${listPath(listId)}/shares`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': key },
+      body: JSON.stringify(body),
+    }),
+
+  importShare: (body: ImportShoppingListShareRequest, key: string) =>
+    apiFetch<ShoppingList>('/shopping-list-shares/import', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': key },
+      body: JSON.stringify(body),
+    }),
+
   getLists: (signal?: AbortSignal) =>
     apiFetch<ShoppingList[]>('/shopping-lists', { signal }),
 
