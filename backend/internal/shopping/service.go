@@ -24,6 +24,7 @@ type Reader interface {
 }
 type Transaction interface {
 	Reader
+	ShareTransaction
 	LockList(context.Context, int64, int64) error
 	CreateList(context.Context, int64, CreateListRequest) (List, error)
 	UpdateList(context.Context, int64, int64, string) (List, error)
