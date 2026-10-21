@@ -23,6 +23,8 @@ type ShoppingService interface {
 	DeleteItem(context.Context, int64, int64, int64) error
 	ClearItems(context.Context, int64, int64) error
 	MarkAll(context.Context, int64, int64, MarkAllRequest) error
+	CreateShare(context.Context, int64, int64, string, CreateShareRequest) (Share, error)
+	ImportShare(context.Context, int64, string, ImportShareRequest) (List, error)
 }
 type Handler struct {
 	service ShoppingService
@@ -106,6 +108,8 @@ func (h *Handler) fail(c *gin.Context, err error) {
 		status, result = 409, ErrorResponse{Code: "idempotency_conflict", Message: "Ключ уже использован для другого запроса"}
 	case errors.Is(err, ErrResourceDeleted):
 		status, result = 409, ErrorResponse{Code: "resource_deleted", Message: "Созданный ресурс удалён"}
+	case errors.Is(err, ErrShareTokenConflict):
+		status, result = 409, ErrorResponse{Code: "share_token_conflict", Message: "Секрет ссылки уже используется"}
 	}
 	if status == 500 {
 		h.log.Error("shopping request failed", "error", err)
@@ -238,4 +242,6 @@ func (h *Handler) Register(group *gin.RouterGroup) {
 	group.GET("/shopping-lists/:listId/items/:itemId", h.GetItem)
 	group.PATCH("/shopping-lists/:listId/items/:itemId", h.UpdateItem)
 	group.DELETE("/shopping-lists/:listId/items/:itemId", h.DeleteItem)
+	group.POST("/shopping-lists/:listId/shares", h.CreateShare)
+	group.POST("/shopping-list-shares/import", h.ImportShare)
 }

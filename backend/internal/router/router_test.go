@@ -1,11 +1,14 @@
 package router
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
@@ -78,6 +81,13 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 		{http.MethodGet, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
 		{http.MethodPatch, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
 		{http.MethodDelete, "/api/shopping-lists/1/items/2", http.StatusUnauthorized},
+		{http.MethodPost, "/api/shopping-lists/1/shares", http.StatusUnauthorized},
+		{http.MethodPost, "/api/shopping-list-shares/import", http.StatusUnauthorized},
+		{http.MethodPost, "/shopping-lists/1/shares", http.StatusNotFound},
+		{http.MethodPost, "/shopping-list-shares/import", http.StatusNotFound},
+		{http.MethodGet, "/api/shopping-lists/1/shares", http.StatusNotFound},
+		{http.MethodGet, "/api/shopping-list-shares/import", http.StatusNotFound},
+		{http.MethodGet, "/api/shopping-list-shares/1", http.StatusNotFound},
 		{http.MethodGet, "/api/products", http.StatusNotFound},
 		{http.MethodGet, "/products", http.StatusNotFound},
 		{http.MethodGet, "/api/users", http.StatusNotFound},
@@ -99,6 +109,76 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, test.status)
 			}
 		})
+	}
+}
+
+type sharingTokenValidator struct{}
+
+func (sharingTokenValidator) ValidateAccessToken(token string) (*auth.TokenClaims, error) {
+	if token != "valid-access-secret" {
+		return nil, errors.New("invalid token")
+	}
+	return &auth.TokenClaims{UserID: 7}, nil
+}
+
+func TestSharingMiddlewarePrivacyAndNoStore(t *testing.T) {
+	var logs bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&logs, nil))
+	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
+		middleware.NewAuthMiddleware(sharingTokenValidator{}),
+		config.Config{AllowedOrigins: []string{"http://client.example.test"}})
+	for _, path := range []string{"/api/shopping-lists/1/shares", "/api/shopping-list-shares/import"} {
+		for _, tc := range []struct {
+			name, authorization string
+			origins             []string
+			status              int
+			code                string
+		}{
+			{"guest", "", nil, 401, "unauthorized"},
+			{"bad access", "Bearer invalid-access-secret", nil, 401, "unauthorized"},
+			{"foreign origin", "Bearer valid-access-secret", []string{"https://foreign.example.test"}, 403, "origin_forbidden"},
+			{"null origin", "Bearer valid-access-secret", []string{"null"}, 403, "origin_forbidden"},
+			{"duplicate origin", "Bearer valid-access-secret",
+				[]string{"http://client.example.test", "http://client.example.test"}, 403, "origin_forbidden"},
+			{"no origin", "Bearer valid-access-secret", nil, 400, "invalid_request"},
+			{"allowed origin", "Bearer valid-access-secret", []string{"http://client.example.test"}, 400, "invalid_request"},
+		} {
+			t.Run(path+tc.name, func(t *testing.T) {
+				// Syntactically invalid JSON reaches no service; secrets must stay out of logs.
+				req := httptest.NewRequest("POST", path+"?private=query-secret", strings.NewReader(`{"token":"body-secret"`))
+				req.Header.Set("Authorization", tc.authorization)
+				req.Header.Set("Cookie", "refreshToken=cookie-secret")
+				req.Header.Set("Referer", "http://client.example.test/share#token=referer-secret")
+				for _, origin := range tc.origins {
+					req.Header.Add("Origin", origin)
+				}
+				w := httptest.NewRecorder()
+				engine.ServeHTTP(w, req)
+				if w.Code != tc.status || !strings.Contains(w.Body.String(), `"code":"`+tc.code+`"`) {
+					t.Fatalf("Неверный отказ middleware: %d %s", w.Code, w.Body.String())
+				}
+				if w.Header().Get("Cache-Control") != "no-store" || len(w.Header().Values("Set-Cookie")) != 0 {
+					t.Fatal("Отказ допускает кеширование или меняет cookie")
+				}
+			})
+		}
+		preflight := httptest.NewRequest("OPTIONS", path, nil)
+		preflight.Header.Set("Origin", "http://client.example.test")
+		preflight.Header.Set("Access-Control-Request-Method", "POST")
+		preflight.Header.Set("Access-Control-Request-Headers", "Authorization,Content-Type,Idempotency-Key")
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, preflight)
+		if w.Code != 204 || w.Header().Get("Access-Control-Allow-Origin") != "http://client.example.test" {
+			t.Fatal("Preflight обмена отклонён")
+		}
+	}
+	for _, secret := range []string{"query-secret", "body-secret", "referer-secret", "cookie-secret", "access-secret"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatal("HTTP-журнал раскрывает секреты запроса")
+		}
+	}
+	if !strings.Contains(logs.String(), "/api/shopping-lists/:listId/shares") {
+		t.Fatal("Журнал должен сохранять безопасный шаблон маршрута")
 	}
 }
 

@@ -26,6 +26,13 @@ func New(
 	}
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestLogger(log))
+	// Set the policy before Origin and authentication can reject a sharing request.
+	router.Use(func(c *gin.Context) {
+		switch c.FullPath() {
+		case "/api/shopping-lists/:listId/shares", "/api/shopping-list-shares/import":
+			c.Header("Cache-Control", "no-store")
+		}
+	})
 	router.Use(middleware.CheckOrigin(cfg.AllowedOrigins))
 
 	router.Use(cors.New(cors.Config{
