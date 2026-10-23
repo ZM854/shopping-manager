@@ -3,11 +3,13 @@ package router
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
+	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -16,6 +18,7 @@ import (
 func New(
 	log *slog.Logger,
 	shoppingHandler *shopping.Handler,
+	recipeHandler *recipe.Handler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
 	cfg config.Config,
@@ -30,6 +33,10 @@ func New(
 	router.Use(func(c *gin.Context) {
 		switch c.FullPath() {
 		case "/api/shopping-lists/:listId/shares", "/api/shopping-list-shares/import":
+			c.Header("Cache-Control", "no-store")
+		}
+		path := c.Request.URL.Path
+		if path == "/api/recipe-categories" || path == "/api/recipes" || strings.HasPrefix(path, "/api/recipes/") {
 			c.Header("Cache-Control", "no-store")
 		}
 	})
@@ -73,9 +80,10 @@ func New(
 	api.POST("/activation/resend", authHandler.ResendActivation)
 	api.POST("/refresh", authHandler.Refresh)
 
-	shoppingAPI := api.Group("")
-	shoppingAPI.Use(authMiddleware.HandleAuth())
-	shoppingHandler.Register(shoppingAPI)
+	privateAPI := api.Group("")
+	privateAPI.Use(authMiddleware.HandleAuth())
+	shoppingHandler.Register(privateAPI)
+	recipeHandler.Register(privateAPI)
 
 	return router
 }

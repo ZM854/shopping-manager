@@ -24,6 +24,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/product"
+	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 	"github.com/ZM854/shopping-manager/backend/internal/testutil/testdb"
@@ -227,7 +228,17 @@ func TestAuthHTTPWithPostgres(t *testing.T) {
 	pool, users, _, tokens, log := repoFixture(t)
 	tokenService := auth.NewTokenService(log, tokens, "test-access-secret", "test-refresh-secret", time.Minute, time.Hour)
 	mail := &activationCapture{}
-	engine := router.New(log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), auth.NewAuthHandler(log, auth.NewUserService(log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions()), false), middleware.NewAuthMiddleware(tokenService), config.Config{AllowedOrigins: []string{"http://client.example.test"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000})
+	userService := auth.NewUserService(
+		log, users, tokenService, mail, "http://client.example.test/activation", auth.DefaultActivationOptions(),
+	)
+	engine := router.New(
+		log, shopping.NewHandler(shopping.NewService(shopping.NewRepository(pool)), log), recipe.NewHandler(nil, log),
+		auth.NewAuthHandler(log, userService, false), middleware.NewAuthMiddleware(tokenService),
+		config.Config{
+			AllowedOrigins: []string{"http://client.example.test"},
+			AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000,
+		},
+	)
 	request := func(method, path, body, bearer string, cookie *http.Cookie) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Idempotency-Key", "auth-http-action-01")

@@ -14,6 +14,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
+	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 )
 
@@ -24,7 +25,10 @@ func TestRateLimitAndProxyTrust(t *testing.T) {
 		if trusted {
 			cfg.TrustedProxies = []string{"127.0.0.1"}
 		}
-		engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), cfg)
+		engine := New(
+			log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log),
+			auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), cfg,
+		)
 		for index := range 3 {
 			req := httptest.NewRequest("POST", "/api/login", nil)
 			req.RemoteAddr = "127.0.0.1:12345"
@@ -57,6 +61,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 	engine := New(
 		log,
 		shopping.NewHandler(nil, log),
+		recipe.NewHandler(nil, log),
 		auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(nil),
 		config.Config{AllowedOrigins: []string{"http://localhost:5173"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000},
@@ -68,6 +73,15 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 		status int
 	}{
 		{http.MethodGet, "/api/healthz", http.StatusOK},
+		{http.MethodGet, "/api/recipe-categories", http.StatusUnauthorized},
+		{http.MethodGet, "/api/recipes", http.StatusUnauthorized},
+		{http.MethodPost, "/api/recipes", http.StatusUnauthorized},
+		{http.MethodGet, "/api/recipes/1", http.StatusUnauthorized},
+		{http.MethodPut, "/api/recipes/1", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/recipes/1", http.StatusUnauthorized},
+		{http.MethodPatch, "/api/recipes/1", http.StatusNotFound},
+		{http.MethodGet, "/recipe-categories", http.StatusNotFound},
+		{http.MethodGet, "/recipes", http.StatusNotFound},
 		{http.MethodGet, "/healthz", http.StatusNotFound},
 		{http.MethodGet, "/api/shopping-lists", http.StatusUnauthorized},
 		{http.MethodPost, "/api/shopping-lists", http.StatusUnauthorized},
@@ -112,6 +126,64 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 	}
 }
 
+func TestRecipeMiddlewarePrivacyAndNoStore(t *testing.T) {
+	var logs bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&logs, nil))
+	engine := New(
+		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
+		middleware.NewAuthMiddleware(sharingTokenValidator{}),
+		config.Config{AllowedOrigins: []string{"http://client.example.test"}},
+	)
+	for _, route := range []struct{ method, path string }{
+		{"GET", "/api/recipe-categories"}, {"GET", "/api/recipes"}, {"POST", "/api/recipes"},
+		{"GET", "/api/recipes/1"}, {"PUT", "/api/recipes/1"}, {"DELETE", "/api/recipes/1"},
+	} {
+		for _, tc := range []struct {
+			name, authorization string
+			origins             []string
+			status              int
+			code                string
+		}{
+			{"guest", "", nil, 401, "unauthorized"},
+			{"bad access", "Bearer invalid-access-secret", nil, 401, "unauthorized"},
+			{"foreign origin", "Bearer valid-access-secret", []string{"https://foreign.example.test"}, 403, "origin_forbidden"},
+			{"null origin", "Bearer valid-access-secret", []string{"null"}, 403, "origin_forbidden"},
+			{"duplicate origin", "Bearer valid-access-secret", []string{"http://client.example.test", "http://client.example.test"}, 403, "origin_forbidden"},
+		} {
+			t.Run(route.method+route.path+tc.name, func(t *testing.T) {
+				req := httptest.NewRequest(route.method, route.path+"?private=query-secret", strings.NewReader(`{"title":"body-secret"`))
+				req.Header.Set("Authorization", tc.authorization)
+				req.Header.Set("Cookie", "refreshToken=cookie-secret")
+				req.Header.Set("Referer", "http://client.example.test/recipes?private=referer-secret")
+				for _, origin := range tc.origins {
+					req.Header.Add("Origin", origin)
+				}
+				w := httptest.NewRecorder()
+				engine.ServeHTTP(w, req)
+				if w.Code != tc.status || !strings.Contains(w.Body.String(), `"code":"`+tc.code+`"`) ||
+					w.Header().Get("Cache-Control") != "no-store" || len(w.Header().Values("Set-Cookie")) != 0 {
+					t.Fatalf("Неверный отказ middleware: %d %s %v", w.Code, w.Body.String(), w.Header())
+				}
+			})
+		}
+		preflight := httptest.NewRequest("OPTIONS", route.path, nil)
+		preflight.Header.Set("Origin", "http://client.example.test")
+		preflight.Header.Set("Access-Control-Request-Method", route.method)
+		preflight.Header.Set("Access-Control-Request-Headers", "Authorization,Content-Type,Idempotency-Key")
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, preflight)
+		if w.Code != 204 || w.Header().Get("Cache-Control") != "no-store" ||
+			w.Header().Get("Access-Control-Allow-Origin") != "http://client.example.test" {
+			t.Fatal("Preflight рецептов отклонён или кеширует персональный ответ")
+		}
+	}
+	for _, secret := range []string{"query-secret", "body-secret", "referer-secret", "cookie-secret", "access-secret"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatal("HTTP-журнал раскрывает данные запроса")
+		}
+	}
+}
+
 type sharingTokenValidator struct{}
 
 func (sharingTokenValidator) ValidateAccessToken(token string) (*auth.TokenClaims, error) {
@@ -124,9 +196,11 @@ func (sharingTokenValidator) ValidateAccessToken(token string) (*auth.TokenClaim
 func TestSharingMiddlewarePrivacyAndNoStore(t *testing.T) {
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
-	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
+	engine := New(
+		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(sharingTokenValidator{}),
-		config.Config{AllowedOrigins: []string{"http://client.example.test"}})
+		config.Config{AllowedOrigins: []string{"http://client.example.test"}},
+	)
 	for _, path := range []string{"/api/shopping-lists/1/shares", "/api/shopping-list-shares/import"} {
 		for _, tc := range []struct {
 			name, authorization string
@@ -184,7 +258,14 @@ func TestSharingMiddlewarePrivacyAndNoStore(t *testing.T) {
 
 func TestCORSAllowedAndRejectedOrigins(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := New(log, shopping.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), config.Config{AllowedOrigins: []string{"http://client.example.test"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000})
+	engine := New(
+		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log),
+		auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil),
+		config.Config{
+			AllowedOrigins: []string{"http://client.example.test"},
+			AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000,
+		},
+	)
 	for _, test := range []struct {
 		origin string
 		status int

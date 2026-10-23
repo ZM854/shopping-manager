@@ -16,6 +16,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
+	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 	"github.com/gin-gonic/gin"
@@ -41,7 +42,8 @@ func newSharingHTTPFixture(t *testing.T) *sharingHTTPFixture {
 		}
 		f.tokens[user] = pair.AccessToken
 	}
-	f.router = router.New(log, shopping.NewHandler(f.service, log), auth.NewAuthHandler(log, nil, false),
+	f.router = router.New(
+		log, shopping.NewHandler(f.service, log), recipe.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(tokens), config.Config{AllowedOrigins: []string{"http://client.example.test"}})
 	return f
 }

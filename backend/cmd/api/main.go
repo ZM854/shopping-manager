@@ -10,6 +10,7 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/logger"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
+	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 )
@@ -42,6 +43,9 @@ func main() {
 	shoppingRepo := shopping.NewRepository(db)
 	shoppingService := shopping.NewService(shoppingRepo)
 	shoppingHandler := shopping.NewHandler(shoppingService, log)
+	recipeRepo := recipe.NewRepository(db)
+	recipeService := recipe.NewService(recipeRepo)
+	recipeHandler := recipe.NewHandler(recipeService, log)
 
 	tokenRepo := auth.NewTokenRepository(db, log)
 	tokenService := auth.NewTokenService(
@@ -96,6 +100,7 @@ func main() {
 	router := router.New(
 		log,
 		shoppingHandler,
+		recipeHandler,
 		authHandler,
 		authMiddleware,
 		cfg,
