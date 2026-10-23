@@ -1,0 +1,52 @@
+.form,
+.group,
+.row {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.form {
+  gap: 24px;
+}
+.group,
+.row {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 0;
+}
+.group legend,
+.row legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.form select,
+.form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--bg);
+  font: inherit;
+}
+.form textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+.form :disabled {
+  opacity: 0.65;
+}
+.form [aria-invalid='true'] {
+  border-color: var(--danger, #b42318);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.hint {
+  color: var(--text-secondary);
+  margin: 0;
+}

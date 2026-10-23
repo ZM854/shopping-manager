@@ -11,7 +11,7 @@ describe('OpenAPI списков', () => {
   it('имеет валидную структуру и не зависит от внешних файлов', async () => {
     const parser = new SwaggerParser();
     const document = await parser.validate(contractPath);
-    expect(document.info.version).toBe('0.7.0');
+    expect(document.info.version).toBe('0.8.0');
     expect(parser.$refs.paths()).toHaveLength(1);
   });
 

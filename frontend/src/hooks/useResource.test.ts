@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useShoppingResource } from './useShoppingResource';
+import { useResource } from './useResource';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -16,10 +16,9 @@ describe('Загрузка и мутации списков', () => {
   it('смена load сбрасывает блокировку старой мутации', async () => {
     const loadA = vi.fn(async () => ['А']);
     const loadB = vi.fn(async () => ['Б']);
-    const { result, rerender } = renderHook(
-      ({ load }) => useShoppingResource(load),
-      { initialProps: { load: loadA } },
-    );
+    const { result, rerender } = renderHook(({ load }) => useResource(load), {
+      initialProps: { load: loadA },
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     const change = deferred<string>();
     let mutation!: Promise<unknown>;
@@ -47,10 +46,9 @@ describe('Загрузка и мутации списков', () => {
     const first = deferred<string>();
     const loadA = vi.fn(() => first.promise);
     const loadB = vi.fn(async () => 'Б');
-    const { result, rerender } = renderHook(
-      ({ load }) => useShoppingResource(load),
-      { initialProps: { load: loadA } },
-    );
+    const { result, rerender } = renderHook(({ load }) => useResource(load), {
+      initialProps: { load: loadA },
+    });
     rerender({ load: loadB });
     await waitFor(() => expect(result.current.data).toBe('Б'));
     await act(async () => first.resolve('А'));
@@ -62,7 +60,7 @@ describe('Загрузка и мутации списков', () => {
       .fn()
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce([]);
-    const { result } = renderHook(() => useShoppingResource(load));
+    const { result } = renderHook(() => useResource(load));
     await waitFor(() => expect(result.current.error).toBe('offline'));
     expect(result.current.data).toBeNull();
     await act(async () => result.current.reload());
@@ -72,7 +70,7 @@ describe('Загрузка и мутации списков', () => {
 
   it('не смешивает позднюю мутацию с новым чтением и не допускает дубль', async () => {
     const load = vi.fn(async () => ['старое']);
-    const { result } = renderHook(() => useShoppingResource(load));
+    const { result } = renderHook(() => useResource(load));
     await waitFor(() => expect(result.current.loading).toBe(false));
     const change = deferred<string>();
     let mutation!: Promise<unknown>;
@@ -98,7 +96,7 @@ describe('Загрузка и мутации списков', () => {
 
   it('пробрасывает ошибки мутаций, сохраняет данные и игнорирует завершение после unmount', async () => {
     const load = vi.fn(async () => ['А']);
-    const { result, unmount } = renderHook(() => useShoppingResource(load));
+    const { result, unmount } = renderHook(() => useResource(load));
     await waitFor(() => expect(result.current.loading).toBe(false));
     await act(async () => {
       await expect(

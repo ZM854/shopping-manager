@@ -48,6 +48,7 @@ postgres_data/
 *.local
 /AGENTS.md
 frontend/.npm-cache/
+frontend/.cache/
 backend/.tools/
 backend/.cache/
 frontend/coverage/

@@ -4,9 +4,7 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Не удалось выполнить запрос';
 }
 
-export function useShoppingResource<T>(
-  load: (signal: AbortSignal) => Promise<T>,
-) {
+export function useResource<T>(load: (signal: AbortSignal) => Promise<T>) {
   const [resource, setResource] = useState({
     source: load,
     data: null as T | null,
@@ -80,7 +78,7 @@ export function useShoppingResource<T>(
     try {
       const result = await action();
       if (!active.current || request !== version.current)
-        throw new Error('Страница списка уже закрыта');
+        throw new Error('Страница уже закрыта');
       setResource((current) => ({
         ...current,
         data: current.data === null ? null : update(current.data, result),
@@ -99,7 +97,6 @@ export function useShoppingResource<T>(
     }
   }
 
-  // При смене load старые данные скрываются уже на первом рендере.
   const current = resource.source === load;
   return {
     data: current ? resource.data : null,

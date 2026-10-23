@@ -1,4 +1,10 @@
-export class InputError extends Error {}
+export class InputError extends Error {
+  readonly fieldErrors?: Record<string, string>;
+  constructor(message: string, fieldErrors?: Record<string, string>) {
+    super(message);
+    this.fieldErrors = fieldErrors;
+  }
+}
 
 export function normalizeQuantity(value: string): string | null {
   if (value === '') return null;

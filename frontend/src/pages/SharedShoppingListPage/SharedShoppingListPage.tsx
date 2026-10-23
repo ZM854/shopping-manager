@@ -4,7 +4,7 @@ import type { LoginRequest } from '../../models/auth';
 import { useAuth } from '../../hooks/useAuth';
 import { useSubmission } from '../../hooks/useSubmission';
 import { useSessionActionGuard } from '../../hooks/useSessionActionGuard';
-import { errorMessage } from '../../hooks/useShoppingResource';
+import { errorMessage } from '../../hooks/useResource';
 import { readShareFragment } from '../../shared/shoppingSharing';
 import { InputError } from '../../shared/shoppingValidation';
 import { ApiError } from '../../services/api';

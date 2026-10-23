@@ -6,6 +6,9 @@ import RequireAuth from './RequireAuth';
 
 import ShoppingListPage from '../pages/ShoppingListPage/ShoppingListPage';
 import ShoppingListsPage from '../pages/ShoppingListsPage/ShoppingListsPage';
+import RecipesPage from '../pages/RecipesPage/RecipesPage';
+import RecipePage from '../pages/RecipePage/RecipePage';
+import RecipeEditorPage from '../pages/RecipeEditorPage/RecipeEditorPage';
 import ProfilePage from '../pages/ProfilePage/ProfilePage';
 
 import LoginPage from '../pages/LoginPage/LoginPage';
@@ -52,6 +55,10 @@ export const router = createBrowserRouter([
             path: '/profile',
             element: <ProfilePage />,
           },
+          { path: '/recipes', element: <RecipesPage /> },
+          { path: '/recipes/new', element: <RecipeEditorPage /> },
+          { path: '/recipes/:recipeId', element: <RecipePage /> },
+          { path: '/recipes/:recipeId/edit', element: <RecipeEditorPage /> },
         ],
       },
     ],

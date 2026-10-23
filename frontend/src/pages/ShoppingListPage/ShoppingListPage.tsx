@@ -6,7 +6,7 @@ import Modal from '../../components/UI/modal/Modal/Modal';
 import Button from '../../components/UI/button/Button/Button';
 import AlertDialog from '../../components/AlertDialog/AlertDialog';
 import ShareListDialog from '../../components/ShareListDialog/ShareListDialog';
-import { useShoppingResource } from '../../hooks/useShoppingResource';
+import { useResource } from '../../hooks/useResource';
 import { useScaffold } from '../../hooks/useScaffold';
 import { shoppingService } from '../../services/shoppingService';
 import type {
@@ -27,7 +27,7 @@ function ShoppingListPage({ listId }: { listId: string }) {
     },
     [listId],
   );
-  const resource = useShoppingResource(load);
+  const resource = useResource(load);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ShoppingItem | null>(null);
   const [clearing, setClearing] = useState(false);

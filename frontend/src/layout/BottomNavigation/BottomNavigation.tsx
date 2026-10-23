@@ -18,6 +18,16 @@ const BottomNavigation = () => {
       </NavLink>
 
       <NavLink
+        to="/recipes"
+        className={({ isActive }) =>
+          isActive ? `${cls.link} ${cls.active}` : cls.link
+        }
+      >
+        <ListIcon className={cls.icon} />
+        <span>Рецепты</span>
+      </NavLink>
+
+      <NavLink
         to="/profile"
         className={({ isActive }) =>
           isActive ? `${cls.link} ${cls.active}` : cls.link

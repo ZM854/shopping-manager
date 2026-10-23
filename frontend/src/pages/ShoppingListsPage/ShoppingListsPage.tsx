@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ShoppingList } from '../../models/shoppingList';
 import { shoppingService } from '../../services/shoppingService';
-import { useShoppingResource } from '../../hooks/useShoppingResource';
+import { useResource } from '../../hooks/useResource';
 import { useScaffold } from '../../hooks/useScaffold';
 import ListForm from '../../components/ListForm/ListForm';
 import AlertDialog from '../../components/AlertDialog/AlertDialog';
@@ -15,7 +15,7 @@ export default function ShoppingListsPage() {
     (signal: AbortSignal) => shoppingService.getLists(signal),
     [],
   );
-  const resource = useShoppingResource(load);
+  const resource = useResource(load);
   const [form, setForm] = useState<ShoppingList | 'create' | null>(null);
   const [deleting, setDeleting] = useState<ShoppingList | null>(null);
   useScaffold({ topBar: { title: 'Списки покупок' }, fab: null });

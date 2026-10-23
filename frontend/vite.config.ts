@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       watch: {
         usePolling: env.VITE_USE_POLLING === 'true',
         interval: 1000,
-        ignored: ['**/.npm-cache/**'],
+        ignored: ['**/.npm-cache/**', '**/.cache/**'],
       },
       proxy: {
         '/api': {

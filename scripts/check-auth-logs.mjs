@@ -99,6 +99,15 @@ async function main() {
     denied.status === 401 && denied.headers.get("cache-control") === "no-store",
     "Неверная защита гостевого импорта.",
   );
+  const oversized = await post(`/recipes?probe=${marker}`, {
+    steps: [{ text: `${marker}${"x".repeat(1048576)}` }],
+  });
+  check(
+    oversized.status === 413 &&
+      oversized.headers.get("cache-control") === "no-store" &&
+      (await oversized.json()).code === "body_too_large",
+    "Нет JSON 413 с no-store от собранного nginx.",
+  );
 
   // Активированный тестовый аккаунт нужен для настоящего клиентского POST импорта.
   phase = "аккаунт и Mailpit";
@@ -230,6 +239,27 @@ async function main() {
       "Неизвестный снимок должен возвращать 404.",
     );
     await page.getByRole("alert").waitFor();
+    phase = "сохранение рецепта в браузере";
+    await page.goto(`${origin}/recipes/new`);
+    await page.getByLabel("Название рецепта", { exact: true }).fill(marker);
+    await page.getByLabel("Категория блюда").selectOption("other");
+    await page.getByLabel("Название ингредиента 1").fill(marker);
+    await page.getByLabel("Описание шага 1").fill(marker);
+    const created = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/recipes") &&
+        response.request().method() === "POST",
+    );
+    await page
+      .getByRole("button", { name: "Сохранить рецепт", exact: true })
+      .click();
+    const recipe = await created;
+    check(
+      recipe.status() === 201 &&
+        recipe.headers()["cache-control"] === "no-store",
+      "Не удалось сохранить тестовый рецепт.",
+    );
+    await page.waitForURL(/\/recipes\/[1-9][0-9]*$/);
     phase = "проверка клиентских данных";
     await captureAuth();
     for (const cookie of await page.context().cookies())
@@ -281,7 +311,8 @@ async function main() {
     assertPrivateLogs(logs, secrets);
     if (
       logs.includes("GET /api/healthz HTTP/") &&
-      logs.includes("path=/api/shopping-list-shares/import")
+      logs.includes("path=/api/shopping-list-shares/import") &&
+      logs.includes("path=/api/recipes")
     )
       break;
     await setTimeout(100);
@@ -294,8 +325,12 @@ async function main() {
     logs.includes("path=/api/shopping-list-shares/import"),
     "Не найдены обычные записи API; проверка неполна.",
   );
+  check(
+    logs.includes("path=/api/recipes"),
+    "Не найдены обычные записи API рецептов; проверка неполна.",
+  );
   console.log(
-    "Проверены nginx, no-referrer, URL запросов и журналы nginx/API/клиента: тестовые секреты отсутствуют.",
+    "Проверены nginx, JSON 413, no-referrer, URL и журналы nginx/API/клиента: секреты и содержимое рецепта отсутствуют.",
   );
 }
 

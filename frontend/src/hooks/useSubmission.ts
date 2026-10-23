@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../services/api';
-import { errorMessage } from './useShoppingResource';
+import { errorMessage } from './useResource';
 import { InputError } from '../shared/shoppingValidation';
 
 export function useSubmission() {
@@ -41,13 +41,13 @@ export function useSubmission() {
         setError(errorMessage(error));
         if (
           error instanceof InputError ||
-          (error instanceof ApiError && error.status < 500)
+          (error instanceof ApiError &&
+            error.status < 500 &&
+            error.code !== 'origin_forbidden')
         ) {
           key.current = null;
           setRetry(false);
-          setFieldErrors(
-            error instanceof ApiError ? (error.fieldErrors ?? {}) : {},
-          );
+          setFieldErrors(error.fieldErrors ?? {});
         } else {
           setRetry(true);
         }
@@ -58,5 +58,13 @@ export function useSubmission() {
     }
   }
 
-  return { pending, retry, error, fieldErrors, submit };
+  function reset() {
+    if (busy.current) return;
+    key.current = null;
+    setRetry(false);
+    setError(null);
+    setFieldErrors({});
+  }
+
+  return { pending, retry, error, fieldErrors, submit, reset };
 }

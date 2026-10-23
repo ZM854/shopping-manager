@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: Shopping Manager API
-  version: 0.7.0
+  version: 0.8.0
   description: >-
-    HTTP API авторизации и личных списков покупок. Базовый префикс — /api.
-    Операции со списками требуют Bearer access token.
+    HTTP API авторизации, личных списков покупок и рецептов. Базовый префикс — /api.
+    Операции со списками, рецептами и справочником категорий требуют Bearer access token.
     Регистрация требует подтверждения почты и не создаёт сессию.
     Refresh передаётся только HttpOnly-cookie, access — в JSON.
     Для refresh/logout обязателен Origin из настроенного списка, в том числе для CLI.
@@ -19,9 +19,114 @@ info:
     только в JSON, не в пути или query. Ссылка многоразовая, без срока действия.
     Импорт отправляется только после подтверждения «Добавить»; открытие страницы,
     вход, reload и «Отмена» сами по себе не создают копию.
+    Личные рецепты сохраняются целиком, без мультимедиа. Все маршруты рецептов
+    и категорий требуют access; все их ответы, включая ошибки Origin/auth, — no-store.
+    JSON POST/PUT рецепта ограничен 1048576 байтами независимо от Content-Length;
+    дубликаты и неизвестные поля запрещены на каждом уровне, null допустим только у quantity.
 servers:
   - url: /api
 paths:
+  /recipe-categories:
+    get:
+      summary: Фиксированный справочник категорий рецептов
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Десять категорий в фиксированном порядке; рецепт выбирает одну
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: array
+                minItems: 10
+                maxItems: 10
+                items: {$ref: '#/components/schemas/RecipeCategory'}
+        '401': {$ref: '#/components/responses/RecipeUnauthorized'}
+        '403': {$ref: '#/components/responses/RecipeOriginForbidden'}
+  /recipes:
+    get:
+      summary: Краткая коллекция личных рецептов
+      description: По возрастанию ID, без ингредиентов/шагов. Пустая коллекция — []. Одинаковые названия допустимы.
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Массив кратких DTO владельца
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/RecipeSummary'}
+        '401': {$ref: '#/components/responses/RecipeUnauthorized'}
+        '403': {$ref: '#/components/responses/RecipeOriginForbidden'}
+        '500': {$ref: '#/components/responses/RecipeInternalError'}
+    post:
+      summary: Создать личный рецепт
+      description: >-
+        Заголовок, ингредиенты, шаги и исходный ответ фиксируются атомарно.
+        Ключ относится к созданию рецепта в пределах пользователя. Повтор
+        нормализованного тела возвращает исходные 201/DTO, в том числе после
+        редактирования; порядок массивов учитывается в хеше. После удаления
+        результата прежний ключ даёт resource_deleted; новое действие с новым
+        ключом создаёт новый рецепт. Владельца задаёт JWT, а не тело запроса.
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {$ref: '#/components/requestBodies/SaveRecipe'}
+      responses:
+        '201': {$ref: '#/components/responses/RecipeResult'}
+        '400': {$ref: '#/components/responses/RecipeBadRequest'}
+        '401': {$ref: '#/components/responses/RecipeUnauthorized'}
+        '403': {$ref: '#/components/responses/RecipeOriginForbidden'}
+        '409': {$ref: '#/components/responses/RecipeConflict'}
+        '413': {$ref: '#/components/responses/RecipeBodyTooLarge'}
+        '500': {$ref: '#/components/responses/RecipeInternalError'}
+  /recipes/{recipeId}:
+    parameters: [{$ref: '#/components/parameters/RecipeId'}]
+    get:
+      summary: Полный личный рецепт
+      description: Заголовок, ингредиенты и шаги читаются из одной согласованной версии. Чужой рецепт не раскрывается.
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/RecipeResult'}
+        '400': {$ref: '#/components/responses/RecipeBadRequest'}
+        '401': {$ref: '#/components/responses/RecipeUnauthorized'}
+        '403': {$ref: '#/components/responses/RecipeOriginForbidden'}
+        '404': {$ref: '#/components/responses/RecipeNotFound'}
+        '500': {$ref: '#/components/responses/RecipeInternalError'}
+    put:
+      summary: Полностью заменить личный рецепт
+      description: >-
+        Обязательны все поля SaveRecipe. Заголовок, метаданные и оба массива
+        заменяются атомарно; ошибка откатывает всё, включая updatedAt.
+        ID и createdAt сохраняются. Отсутствующий рецепт не создаётся.
+        Параллельные сохранения сериализуются, побеждает последнее;
+        ETag/If-Match и защита от потери параллельных правок не используются.
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/SaveRecipe'}
+      responses:
+        '200': {$ref: '#/components/responses/RecipeResult'}
+        '400': {$ref: '#/components/responses/RecipeBadRequest'}
+        '401': {$ref: '#/components/responses/RecipeUnauthorized'}
+        '403': {$ref: '#/components/responses/RecipeOriginForbidden'}
+        '404': {$ref: '#/components/responses/RecipeNotFound'}
+        '413': {$ref: '#/components/responses/RecipeBodyTooLarge'}
+        '500': {$ref: '#/components/responses/RecipeInternalError'}
+    delete:
+      summary: Удалить личный рецепт вместе с ингредиентами и шагами
+      description: Чужой/отсутствующий рецепт, включая повторное удаление, даёт 404. Исходный replay POST сохраняется.
+      security: [{bearerAuth: []}]
+      responses:
+        '204':
+          description: Рецепт удалён, тело отсутствует
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+        '400': {$ref: '#/components/responses/RecipeBadRequest'}
+        '401': {$ref: '#/components/responses/RecipeUnauthorized'}
+        '403': {$ref: '#/components/responses/RecipeOriginForbidden'}
+        '404': {$ref: '#/components/responses/RecipeNotFound'}
+        '500': {$ref: '#/components/responses/RecipeInternalError'}
   /healthz:
     get:
       summary: Проверка работы HTTP-сервера
@@ -502,6 +607,18 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
 components:
+  requestBodies:
+    SaveRecipe:
+      required: true
+      x-max-body-bytes: 1048576
+      description: >-
+        Один JSON-объект UTF-8 до 1048576 байт, в том числе без Content-Length.
+        Имена регистрозависимы; неизвестные и повторяющиеся ключи запрещены
+        на всех уровнях. null допустим только у quantity. Входные ID, position,
+        ownerId и временные поля запрещены. Обложки и медиа пока не принимаются.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SaveRecipe'}
   headers:
     NoStore:
       description: Ответ не должен сохраняться в кеше
@@ -516,6 +633,11 @@ components:
       in: cookie
       name: refreshToken
   parameters:
+    RecipeId:
+      name: recipeId
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Id'}
     AuthOrigin:
       name: Origin
       in: header
@@ -552,6 +674,118 @@ components:
         maxLength: 128
         pattern: '^[A-Za-z0-9_-]{16,128}$'
   schemas:
+    RecipeCategoryCode:
+      type: string
+      enum: [soups, salads, starters, main-dishes, side-dishes, baking, desserts, sauces, drinks, other]
+    RecipeCategory:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: {$ref: '#/components/schemas/RecipeCategoryCode'}
+        name: {type: string, description: Русское название категории из серверного справочника}
+    RecipeTitle:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: После Unicode trim; длина в кодовых точках, управляющие символы запрещены.
+    RecipeCookingTime:
+      type: integer
+      minimum: 5
+      maximum: 1440
+      multipleOf: 5
+      description: Суммарное время в минутах, включая ожидание и выпечку. JSON-целое без дробной части и экспоненты.
+    RecipeStepText:
+      type: string
+      minLength: 1
+      maxLength: 20000
+      description: >-
+        Обычный текст, не HTML/Markdown. Нормализуются CRLF/CR в LF и краевые
+        Unicode-пробелы; внутренние отступы, LF и TAB сохраняются, другие
+        управляющие символы запрещены. Длина после нормализации в кодовых точках.
+        Одно большое описание допускается; суммарно во всех шагах до 50000 точек.
+    RecipeIngredientInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {$ref: '#/components/schemas/RecipeTitle'}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        unit: {$ref: '#/components/schemas/Unit'}
+      description: Количество и единица независимы; отсутствие количества — null, единицы — пустая строка. Дубликаты не объединяются.
+    RecipeStepInput:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: {$ref: '#/components/schemas/RecipeStepText'}
+    SaveRecipe:
+      type: object
+      additionalProperties: false
+      required: [title, cookingTimeMinutes, categoryCode, ingredients, steps]
+      properties:
+        title: {$ref: '#/components/schemas/RecipeTitle'}
+        cookingTimeMinutes: {$ref: '#/components/schemas/RecipeCookingTime'}
+        categoryCode: {$ref: '#/components/schemas/RecipeCategoryCode'}
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: {$ref: '#/components/schemas/RecipeIngredientInput'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: В порядке приготовления, суммарно до 50000 Unicode-кодовых точек текста после нормализации
+          items: {$ref: '#/components/schemas/RecipeStepInput'}
+    RecipeIngredient:
+      type: object
+      additionalProperties: false
+      required: [position, name, quantity, unit]
+      properties:
+        position: {type: integer, minimum: 1, maximum: 200, description: 'Порядок входного массива, назначенный сервером с 1'}
+        name: {$ref: '#/components/schemas/RecipeTitle'}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        unit: {$ref: '#/components/schemas/Unit'}
+    RecipeStep:
+      type: object
+      additionalProperties: false
+      required: [position, text]
+      properties:
+        position: {type: integer, minimum: 1, maximum: 100, description: Порядковый номер с 1; не постоянный ID шага}
+        text: {$ref: '#/components/schemas/RecipeStepText'}
+    RecipeSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, cookingTimeMinutes, categoryCode, createdAt, updatedAt]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        title: {$ref: '#/components/schemas/RecipeTitle'}
+        cookingTimeMinutes: {$ref: '#/components/schemas/RecipeCookingTime'}
+        categoryCode: {$ref: '#/components/schemas/RecipeCategoryCode'}
+        createdAt: {type: string, format: date-time, description: UTC RFC3339}
+        updatedAt: {type: string, format: date-time, description: UTC RFC3339}
+    Recipe:
+      type: object
+      additionalProperties: false
+      required: [id, title, cookingTimeMinutes, categoryCode, createdAt, updatedAt, ingredients, steps]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        title: {$ref: '#/components/schemas/RecipeTitle'}
+        cookingTimeMinutes: {$ref: '#/components/schemas/RecipeCookingTime'}
+        categoryCode: {$ref: '#/components/schemas/RecipeCategoryCode'}
+        createdAt: {type: string, format: date-time, description: UTC RFC3339}
+        updatedAt: {type: string, format: date-time, description: UTC RFC3339}
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: {$ref: '#/components/schemas/RecipeIngredient'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {$ref: '#/components/schemas/RecipeStep'}
     RegistrationResponse:
       type: object
       additionalProperties: false
@@ -709,6 +943,66 @@ components:
           type: object
           additionalProperties: {type: string}
   responses:
+    RecipeResult:
+      description: Полный DTO рецепта; для повтора POST — исходный ответ после проверки доступа
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Recipe'}
+    RecipeBadRequest:
+      description: >-
+        invalid_request — неверный JSON/UTF-8, типы, неизвестные/дублирующиеся поля
+        на любом уровне или null вне quantity. validation_failed — отсутствующие
+        обязательные поля, неверные значения, ID или Idempotency-Key. fieldErrors
+        содержит пути вроде ingredients.0.quantity/steps.0.text без значений запроса.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RecipeUnauthorized:
+      description: unauthorized — требуется действующий Bearer access подтверждённого пользователя
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RecipeOriginForbidden:
+      description: origin_forbidden — чужой/null/неоднозначный Origin, cookie не меняется. Отсутствие Origin разрешено.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RecipeNotFound:
+      description: not_found — рецепт отсутствует или принадлежит другому пользователю; ответ не раскрывает владельца
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RecipeConflict:
+      description: idempotency_conflict — ключ использован с другим нормализованным телом; resource_deleted — результат прежнего POST удалён. Новое действие требует нового ключа.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RecipeBodyTooLarge:
+      description: body_too_large — тело превышает 1048576 байт, независимо от Content-Length
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RecipeInternalError:
+      description: internal_error — ошибка без SQL и содержимого рецепта; незавершённая операция откатывается целиком
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
     SharingBadRequest:
       description: >-
         invalid_request — некорректный JSON/UTF-8, null, неизвестные или повторяющиеся поля;
