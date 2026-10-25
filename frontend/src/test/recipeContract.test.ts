@@ -193,11 +193,45 @@ describe('OpenAPI рецептов', () => {
       },
     });
     expect(schemas?.RecipeStep).toMatchObject({
-      required: ['position', 'text'],
+      required: ['id', 'position', 'text'],
+      properties: { id: { type: 'string', maxLength: 19 } },
     });
     expect(schemas?.RecipeCategory).toMatchObject({
       additionalProperties: false,
       required: ['code', 'name'],
+    });
+  });
+
+  it('разрешает ID только в шагах PUT и возвращает единый полный DTO', async () => {
+    const document = await SwaggerParser.validate(contractPath);
+    if (!('components' in document)) throw new Error('Ожидался OpenAPI 3');
+    const schemas = document.components?.schemas;
+    const update = document.paths?.['/recipes/{recipeId}']?.put?.requestBody;
+    expect(update).toMatchObject({
+      content: {
+        'application/json': { schema: schemas?.UpdateRecipe },
+      },
+    });
+    expect(schemas?.RecipeUpdateStepWithId).toMatchObject({
+      additionalProperties: false,
+      required: ['text'],
+      properties: { id: { type: 'string', pattern: '^[1-9][0-9]{0,18}$' } },
+    });
+    for (const method of ['get', 'put'] as const) {
+      expect(
+        document.paths?.['/recipes/{recipeId}']?.[method]?.responses?.['200'],
+      ).toMatchObject({
+        content: { 'application/json': { schema: schemas?.Recipe } },
+      });
+    }
+    expect(
+      document.paths?.['/recipes']?.post?.responses?.['201'],
+    ).toMatchObject({
+      content: {
+        'application/json': {
+          schema: schemas?.Recipe,
+        },
+      },
     });
   });
 });

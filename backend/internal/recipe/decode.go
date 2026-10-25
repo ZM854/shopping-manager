@@ -35,7 +35,11 @@ func decodeSaveRequest(c *gin.Context) (SaveRequest, error) {
 		}
 	}
 	if raw, ok := fields["steps"]; ok {
-		if err := checkArray(raw, "steps", MaxSteps, "text"); err != nil {
+		allowed := []string{"text"}
+		if c.Request.Method == http.MethodPut {
+			allowed = append(allowed, "id")
+		}
+		if err := checkArray(raw, "steps", MaxSteps, allowed...); err != nil {
 			return SaveRequest{}, err
 		}
 	}

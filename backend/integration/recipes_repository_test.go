@@ -27,7 +27,7 @@ type recipeRepositoryFixture struct {
 func newRecipeRepositoryFixture(t *testing.T) *recipeRepositoryFixture {
 	t.Helper()
 	pool := testdb.New(t)
-	testdb.ApplyMigrations(t, pool, 0, 10)
+	testdb.ApplyMigrations(t, pool, 0, 11)
 	return &recipeRepositoryFixture{
 		pool: pool, repo: recipe.NewRepository(pool),
 		first:  migrationUser(t, pool, "recipe-first@example.test"),
@@ -77,7 +77,7 @@ func checkRecipeContents(t *testing.T, got recipe.Recipe, req recipe.SaveRequest
 		}
 	}
 	for i, step := range got.Steps {
-		if step.Position != i+1 || step.Text != req.Steps[i].Text {
+		if step.ID <= 0 || step.Position != i+1 || step.Text != req.Steps[i].Text {
 			t.Fatalf("Шаг %d: %+v", i, step)
 		}
 	}
@@ -221,7 +221,9 @@ func TestRecipeRepositoryReadOrderAndExactQuantity(t *testing.T) {
 		{Position: 3, Name: "Повтор", Unit: "по вкусу"},
 	}
 	if !reflect.DeepEqual(loaded.Ingredients, wantIngredients) ||
-		!reflect.DeepEqual(loaded.Steps, []recipe.Step{{Position: 1, Text: "Первый"}, {Position: 2, Text: "Второй"}}) {
+		len(loaded.Steps) != 2 || loaded.Steps[0].ID <= 0 || loaded.Steps[1].ID <= 0 ||
+		loaded.Steps[0].Position != 1 || loaded.Steps[0].Text != "Первый" ||
+		loaded.Steps[1].Position != 2 || loaded.Steps[1].Text != "Второй" {
 		t.Fatalf("Порядок/decimal/null: %+v, %+v", loaded.Ingredients, loaded.Steps)
 	}
 }

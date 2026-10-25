@@ -10,7 +10,6 @@ type NextContract = {
   status: string;
   paths: OpenAPIV3.PathsObject;
   limits: Record<string, number | number[]>;
-  replayFormats: Record<string, string>;
 };
 type Contract = OpenAPIV3.Document & { 'x-next-contract'?: NextContract };
 
@@ -69,14 +68,14 @@ beforeAll(async () => {
 
 describe('Целевой HTTP-контракт медиа рецептов', () => {
   it('проверяет обе версии и сохраняет действующие маршруты/DTO до реализации', () => {
-    expect(active.info.version).toBe('0.8.0');
+    expect(active.info.version).toBe('0.8.1');
     expect(next.status).toBe('planned');
     expect(target.info.version).toBe('0.9.0');
     for (const path of mediaPaths) {
       expect(active.paths[path]).toBeUndefined();
       expect(target.paths[path]).toBeDefined();
     }
-    expect(schema(active, 'RecipeStep').properties).not.toHaveProperty('id');
+    expect(schema(active, 'RecipeStep').required).toContain('id');
     expect(schema(active, 'RecipeSummary').properties).not.toHaveProperty(
       'cover',
     );
@@ -229,16 +228,11 @@ describe('Целевой HTTP-контракт медиа рецептов', () 
     expect(next.limits.recipeVideos).toBe(5);
   });
 
-  it('оставляет старые снимки только у POST replay, без подписанных URL в DTO', () => {
+  it('возвращает единый DTO с медиа без подписанных URL', () => {
     const created = response(target.paths['/recipes']?.post, '201').content?.[
       'application/json'
     ].schema;
-    expect(created).toHaveProperty('oneOf', [
-      schema(target, 'Recipe'),
-      schema(target, 'RecipeWithStepIds'),
-      schema(target, 'RecipeWithMedia'),
-    ]);
-    expect(Object.keys(next.replayFormats)).toEqual(['1', '2', '3']);
+    expect(created).toEqual(schema(target, 'RecipeWithMedia'));
     for (const operation of [
       target.paths['/recipes/{recipeId}']?.get,
       target.paths['/recipes/{recipeId}']?.put,

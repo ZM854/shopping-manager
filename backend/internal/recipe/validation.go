@@ -90,7 +90,6 @@ func normalizeStepText(value, field string) (string, error) {
 	return value, nil
 }
 
-
 func normalizeSaveRequest(req SaveRequest) (SaveRequest, error) {
 	var result SaveRequest
 	title, err := normalizeText(req.Title, "title", MaxTitleLength, true)
@@ -135,7 +134,17 @@ func normalizeSaveRequest(req SaveRequest) (SaveRequest, error) {
 		result.Ingredients[i] = IngredientRequest{Name: name, Quantity: quantity, Unit: unit}
 	}
 	totalTextLength := 0
+	stepIDs := make(map[string]bool, len(req.Steps))
 	for i, step := range req.Steps {
+		var id *string
+		if step.ID != nil {
+			value := *step.ID
+			if _, err := ParseID(value); err != nil || stepIDs[value] {
+				return SaveRequest{}, invalid("steps." + strconv.Itoa(i) + ".id")
+			}
+			stepIDs[value] = true
+			id = &value
+		}
 		text, err := normalizeStepText(step.Text, "steps."+strconv.Itoa(i)+".text")
 		if err != nil {
 			return SaveRequest{}, err
@@ -144,7 +153,7 @@ func normalizeSaveRequest(req SaveRequest) (SaveRequest, error) {
 		if totalTextLength > MaxTotalStepTextLength {
 			return SaveRequest{}, invalid("steps")
 		}
-		result.Steps[i] = StepRequest{Text: text}
+		result.Steps[i] = StepRequest{ID: id, Text: text}
 	}
 	return result, nil
 }

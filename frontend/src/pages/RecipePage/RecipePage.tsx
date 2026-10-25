@@ -109,7 +109,7 @@ function RecipeContent({ id }: { id: string }) {
           <h2>Приготовление</h2>
           <ol className={cls.steps}>
             {recipe.steps.map((step) => (
-              <li key={step.position} value={step.position}>
+              <li key={step.id} value={step.position}>
                 <p className={cls.stepText}>{step.text}</p>
               </li>
             ))}

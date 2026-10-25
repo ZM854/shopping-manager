@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 )
 
@@ -43,6 +44,11 @@ func (s *Service) CreateRecipe(ctx context.Context, owner int64, key string, req
 	if err != nil {
 		return Recipe{}, err
 	}
+	for i, step := range req.Steps {
+		if step.ID != nil {
+			return Recipe{}, invalid("steps." + strconv.Itoa(i) + ".id")
+		}
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return Recipe{}, err
@@ -64,7 +70,18 @@ func (s *Service) CreateRecipe(ctx context.Context, owner int64, key string, req
 			} else if err != nil {
 				return err
 			}
-			return json.Unmarshal(replay.Response, &result)
+			if err := json.Unmarshal(replay.Response, &result); err != nil {
+				return err
+			}
+			if result.ID != *replay.ResourceID || result.ID <= 0 {
+				return errors.New("invalid recipe replay resource")
+			}
+			for _, step := range result.Steps {
+				if step.ID <= 0 {
+					return errors.New("invalid recipe replay steps")
+				}
+			}
+			return nil
 		}
 		result, err = tx.CreateRecipe(ctx, owner, req)
 		if err != nil {

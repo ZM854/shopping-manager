@@ -39,7 +39,7 @@ func TestRecipeDTOJSONPreservesIDDecimalAndPlainText(t *testing.T) {
 			{Position: 1, Name: "Яйца", Quantity: quantityPointer("999999999.999")},
 			{Position: 2, Name: "Соль", Unit: "по вкусу"},
 		},
-		Steps: []Step{{Position: 1, Text: "Взбить яйца.\n\tПриготовить. <b>Текст</b>"}},
+		Steps: []Step{{ID: 9223372036854775807, Position: 1, Text: "Взбить яйца.\n\tПриготовить. <b>Текст</b>"}},
 	}
 	fields := jsonFields(t, recipe,
 		"id", "title", "cookingTimeMinutes", "categoryCode", "createdAt", "updatedAt", "ingredients", "steps")
@@ -60,7 +60,10 @@ func TestRecipeDTOJSONPreservesIDDecimalAndPlainText(t *testing.T) {
 	if string(second["quantity"]) != "null" {
 		t.Fatal("Отсутствующее количество должно быть явным null")
 	}
-	jsonFields(t, recipe.Steps[0], "position", "text")
+	step := jsonFields(t, recipe.Steps[0], "id", "position", "text")
+	if string(step["id"]) != `"9223372036854775807"` {
+		t.Fatal("ID шага теряет точность")
+	}
 	data, err := json.Marshal(recipe)
 	if err != nil {
 		t.Fatal(err)

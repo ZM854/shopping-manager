@@ -42,6 +42,7 @@ type Ingredient struct {
 }
 
 type Step struct {
+	ID       int64  `json:"id,string"`
 	Position int    `json:"position"`
 	Text     string `json:"text"`
 }
@@ -61,7 +62,8 @@ type IngredientRequest struct {
 }
 
 type StepRequest struct {
-	Text string `json:"text"`
+	ID   *string `json:"id,omitempty"`
+	Text string  `json:"text"`
 }
 
 type ErrorResponse struct {

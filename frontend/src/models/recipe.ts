@@ -16,7 +16,7 @@ export type RecipeIngredient = {
   unit: string;
 };
 
-export type RecipeStep = { position: number; text: string };
+export type RecipeStep = { id: string; position: number; text: string };
 
 export type Recipe = RecipeSummary & {
   ingredients: RecipeIngredient[];
@@ -28,13 +28,14 @@ export type SaveRecipeRequest = {
   cookingTimeMinutes: number;
   categoryCode: string;
   ingredients: Omit<RecipeIngredient, 'position'>[];
-  steps: Omit<RecipeStep, 'position'>[];
+  steps: { id?: string; text: string }[];
 };
 
 export type RecipeDraft = Omit<
   SaveRecipeRequest,
-  'cookingTimeMinutes' | 'ingredients'
+  'cookingTimeMinutes' | 'ingredients' | 'steps'
 > & {
   cookingTimeMinutes: string;
   ingredients: { name: string; quantity: string; unit: string }[];
+  steps: { stepId?: string; text: string }[];
 };

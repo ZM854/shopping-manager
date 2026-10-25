@@ -30,7 +30,7 @@ export const recipeService = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
-    
+
   deleteRecipe: (id: string) =>
     apiFetch<void>(recipePath(id), { method: 'DELETE' }),
 };

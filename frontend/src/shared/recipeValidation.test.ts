@@ -27,6 +27,28 @@ function fieldError(value: RecipeDraft, path: string) {
 }
 
 describe('Валидация рецептов', () => {
+  it('сохраняет отдельные строковые ID шагов при нормализации и перестановке', () => {
+    const value = draft();
+    value.steps = [
+      { stepId: '9223372036854775807', text: ' Второй ' },
+      { text: 'Новый' },
+      { stepId: '9007199254740993', text: 'Первый' },
+    ];
+    const result = normalizeRecipe(value, categories);
+    expect(result.steps).toEqual([
+      { id: '9223372036854775807', text: 'Второй' },
+      { text: 'Новый' },
+      { id: '9007199254740993', text: 'Первый' },
+    ]);
+    result.steps[0].id = '1';
+    expect(value.steps[0].stepId).toBe('9223372036854775807');
+    for (const stepId of ['0', '-1', '01', '9223372036854775808']) {
+      value.steps[0].stepId = stepId;
+      fieldError(value, 'steps.0.id');
+    }
+    value.steps[0].stepId = '9007199254740993';
+    fieldError(value, 'steps.2.id');
+  });
   it('нормализует независимые количество/единицу и переносы, сохраняя исходный черновик и дубликаты', () => {
     const value = draft();
     value.ingredients.push({

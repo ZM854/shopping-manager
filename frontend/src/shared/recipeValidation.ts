@@ -57,7 +57,7 @@ export function recipeToDraft(recipe?: Recipe): RecipeDraft {
       quantity: quantity ?? '',
       unit,
     })),
-    steps: recipe.steps.map(({ text }) => ({ text })),
+    steps: recipe.steps.map(({ id, text }) => ({ stepId: id, text })),
   };
 }
 
@@ -112,7 +112,18 @@ export function normalizeRecipe(
     return { name, quantity, unit };
   });
   let total = 0;
+  const stepIds = new Set<string>();
   const steps = draft.steps.map((step, index) => {
+    const id = step.stepId;
+    if (id !== undefined) {
+      if (
+        !/^[1-9][0-9]{0,18}$/.test(id) ||
+        BigInt(id) > 9223372036854775807n ||
+        stepIds.has(id)
+      )
+        invalid(`steps.${index}.id`, 'Некорректный или повторяющийся ID шага');
+      stepIds.add(id);
+    }
     const text = normalizeStepText(step.text);
     const field = `steps.${index}.text`;
     for (const char of step.text.replace(/\r\n?/g, '\n')) {
@@ -128,7 +139,7 @@ export function normalizeRecipe(
     total += length;
     if (total > recipeLimits.totalText)
       invalid('steps', 'Все шаги вместе: не более 50000 символов');
-    return { text };
+    return id === undefined ? { text } : { id, text };
   });
   const result = {
     title,

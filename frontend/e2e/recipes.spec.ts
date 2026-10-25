@@ -47,7 +47,9 @@ test('личный CRUD: большой шаг, точные количеств�
   expect(response.headers()['cache-control']).toBe('no-store');
   const original: Recipe = await response.json();
   expect(original.id).toMatch(/^[1-9][0-9]*$/);
-  expect(original.steps).toEqual([{ position: 1, text: longText }]);
+  expect(original.steps).toEqual([
+    { id: expect.stringMatching(/^[1-9][0-9]*$/), position: 1, text: longText },
+  ]);
   expect(original.ingredients).toEqual([
     { position: 1, name: 'Соль', quantity: null, unit: 'по вкусу' },
     { position: 2, name: 'Вода', quantity: '999999999.999', unit: '' },
@@ -126,8 +128,12 @@ test('личный CRUD: большой шаг, точные количеств�
   const edited: Recipe = await saved.json();
   expect(edited.id).toBe(original.id);
   expect(edited.steps).toEqual([
-    { position: 1, text: 'Второй' },
-    { position: 2, text: 'Первый\n\tОтступ сохранён.' },
+    { id: expect.stringMatching(/^[1-9][0-9]*$/), position: 1, text: 'Второй' },
+    {
+      id: original.steps[0].id,
+      position: 2,
+      text: 'Первый\n\tОтступ сохранён.',
+    },
   ]);
   expect(edited.ingredients).toEqual(original.ingredients.slice(0, 2));
   await expect(page).toHaveURL(`/recipes/${original.id}`);

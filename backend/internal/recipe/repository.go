@@ -109,7 +109,7 @@ func (r *Repository) GetRecipe(ctx context.Context, owner, id int64) (Recipe, er
 			), '[]'::jsonb),
 			COALESCE((
 				SELECT jsonb_agg(jsonb_build_object(
-					'position', s.position, 'text', s.text
+					'id', s.id::text, 'position', s.position, 'text', s.text
 				) ORDER BY s.position)
 				FROM recipe_steps s WHERE s.recipe_id = r.id
 			), '[]'::jsonb)
@@ -173,7 +173,6 @@ func (r *transactionRepository) UpdateRecipe(ctx context.Context, owner, id int6
 	return r.GetRecipe(ctx, owner, id)
 }
 
-
 func (r *transactionRepository) replaceContents(ctx context.Context, owner, id int64, req SaveRequest) error {
 	if _, err := r.db.Exec(ctx, `
 		DELETE FROM recipe_ingredients i USING recipes r
@@ -181,13 +180,6 @@ func (r *transactionRepository) replaceContents(ctx context.Context, owner, id i
 	); err != nil {
 		return err
 	}
-	if _, err := r.db.Exec(ctx, `
-		DELETE FROM recipe_steps s USING recipes r
-		WHERE s.recipe_id = r.id AND r.owner_id = $1 AND r.id = $2`, owner, id,
-	); err != nil {
-		return err
-	}
-
 	names := make([]string, len(req.Ingredients))
 	quantities := make([]*string, len(req.Ingredients))
 	units := make([]string, len(req.Ingredients))
@@ -204,15 +196,59 @@ func (r *transactionRepository) replaceContents(ctx context.Context, owner, id i
 	); err != nil {
 		return err
 	}
-	texts := make([]string, len(req.Steps))
-	for i, step := range req.Steps {
-		texts[i] = step.Text
+	return r.replaceSteps(ctx, owner, id, req.Steps)
+}
+
+func (r *transactionRepository) replaceSteps(ctx context.Context, owner, id int64, steps []StepRequest) error {
+	ids := make([]int64, 0, len(steps))
+	positions := make([]int32, 0, len(steps))
+	texts := make([]string, 0, len(steps))
+	newPositions := make([]int32, 0, len(steps))
+	newTexts := make([]string, 0, len(steps))
+	for i, step := range steps {
+		if step.ID == nil {
+			newPositions = append(newPositions, int32(i+1))
+			newTexts = append(newTexts, step.Text)
+			continue
+		}
+		stepID, err := ParseID(*step.ID)
+		if err != nil {
+			return err
+		}
+		ids = append(ids, stepID)
+		positions = append(positions, int32(i+1))
+		texts = append(texts, step.Text)
+	}
+	if _, err := r.db.Exec(ctx, `
+		DELETE FROM recipe_steps s USING recipes r
+		WHERE s.recipe_id = r.id AND r.owner_id = $1 AND r.id = $2
+			AND NOT (s.id = ANY($3::bigint[]))`, owner, id, ids,
+	); err != nil {
+		return err
+	}
+	if len(ids) > 0 {
+		tag, err := r.db.Exec(ctx, `
+			UPDATE recipe_steps s SET position = v.position, text = v.text
+			FROM recipes r, unnest($3::bigint[], $4::integer[], $5::text[])
+				AS v(id, position, text)
+			WHERE s.recipe_id = r.id AND r.owner_id = $1 AND r.id = $2 AND s.id = v.id`,
+			owner, id, ids, positions, texts,
+		)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != int64(len(ids)) {
+			return ErrNotFound
+		}
+	}
+	if len(newTexts) == 0 {
+		return nil
 	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO recipe_steps (recipe_id, position, text)
-		SELECT r.id, s.position, s.text
-		FROM recipes r CROSS JOIN unnest($3::text[]) WITH ORDINALITY AS s(text, position)
-		WHERE r.owner_id = $1 AND r.id = $2`, owner, id, texts)
+		SELECT r.id, v.position, v.text
+		FROM recipes r CROSS JOIN unnest($3::integer[], $4::text[]) AS v(position, text)
+		WHERE r.owner_id = $1 AND r.id = $2`, owner, id, newPositions, newTexts)
 	return err
 }
 

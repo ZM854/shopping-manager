@@ -60,7 +60,13 @@ function recipe(recipeId = id, title = 'Первый рецепт'): Recipe {
     ingredients: [
       { position: 1, name: 'Мука', quantity: '999999999.999', unit: 'г' },
     ],
-    steps: [{ position: 1, text: 'Смешать\n\tИспечь' }],
+    steps: [
+      {
+        id: (BigInt(recipeId) + 10n).toString(),
+        position: 1,
+        text: 'Смешать\n\tИспечь',
+      },
+    ],
   };
 }
 function saved(body: SaveRecipeRequest, recipeId = '9007199254740995'): Recipe {
@@ -71,7 +77,11 @@ function saved(body: SaveRecipeRequest, recipeId = '9007199254740995'): Recipe {
       ...ingredient,
       position: index + 1,
     })),
-    steps: body.steps.map((step, index) => ({ ...step, position: index + 1 })),
+    steps: body.steps.map((step, index) => ({
+      ...step,
+      id: step.id ?? (BigInt(recipeId) + BigInt(index) + 100n).toString(),
+      position: index + 1,
+    })),
   };
 }
 function deferred<T>() {
@@ -233,7 +243,7 @@ describe('Демонстрационный клиент рецептов', () =>
     });
     expect(key).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
   });
-  it('заменяет рецепт через PUT без ID/позиций в теле', async () => {
+  it('заменяет рецепт через PUT с постоянным ID шага без позиций и ID рецепта', async () => {
     show(`/recipes/${id}/edit`);
     const user = userEvent.setup();
     const title = await screen.findByLabelText('Название рецепта');
@@ -252,7 +262,30 @@ describe('Демонстрационный клиент рецептов', () =>
       'steps',
     ]);
     expect(api.updateRecipe.mock.calls[0][1].steps).toEqual([
-      { text: 'Смешать\n\tИспечь' },
+      { id: (BigInt(id) + 10n).toString(), text: 'Смешать\n\tИспечь' },
+    ]);
+  });
+  it('перемещает и удаляет шаги редактора вместе с серверными ID', async () => {
+    recipes[0].steps = [
+      { id: '9007199254741001', position: 1, text: 'Первый' },
+      { id: '9007199254741002', position: 2, text: 'Второй' },
+      { id: '9007199254741003', position: 3, text: 'Третий' },
+    ];
+    show(`/recipes/${id}/edit`);
+    const user = userEvent.setup();
+    await screen.findByLabelText('Описание шага 3');
+    await user.click(screen.getByRole('button', { name: 'Шаг 3: выше' }));
+    await user.click(screen.getByRole('button', { name: 'Удалить шаг 1' }));
+    await user.click(screen.getByRole('button', { name: 'Добавить шаг' }));
+    fireEvent.change(screen.getByLabelText('Описание шага 3'), {
+      target: { value: 'Новый' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Сохранить рецепт' }));
+    await screen.findByRole('heading', { level: 1, name: 'Первый рецепт' });
+    expect(api.updateRecipe.mock.calls[0][1].steps).toEqual([
+      { id: '9007199254741003', text: 'Третий' },
+      { id: '9007199254741002', text: 'Второй' },
+      { text: 'Новый' },
     ]);
   });
   it('валидирует до POST и отображает серверные ошибки вложенных полей', async () => {
