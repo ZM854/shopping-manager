@@ -4,16 +4,10 @@ DEV_COMPOSE = $(COMPOSE) -f compose.dev.yaml
 MODE ?= dev
 ACTIVE_COMPOSE = $(if $(filter built,$(MODE)),$(COMPOSE),$(DEV_COMPOSE))
 
-.PHONY: init dev up down logs status restart migrate-up migrate-version frontend-check backend-check frontend-test frontend-coverage backend-test backend-coverage backend-integration integration-coverage test-db-up e2e-env e2e-up e2e e2e-stop
+.PHONY: init dev up down logs status restart migrate-up migrate-version frontend-check backend-check frontend-test frontend-coverage backend-test backend-coverage backend-integration integration-coverage media-check test-db-up e2e-env e2e-up e2e e2e-stop
 
 init:
-	@if [ -f .env ]; then echo 'Root .env already exists; kept unchanged.'; \
-	else umask 077; \
-	access_secret=$$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n'); \
-	refresh_secret=$$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n'); \
-	test $${#access_secret} -eq 64 && test $${#refresh_secret} -eq 64 && \
-	sed -e "s/GENERATE_ACCESS_SECRET/$$access_secret/" -e "s/GENERATE_REFRESH_SECRET/$$refresh_secret/" .env.example > .env && \
-	echo 'Created root .env with independent random JWT secrets.'; fi
+	node scripts/init-env.mjs
 
 dev:
 	$(DEV_COMPOSE) up --build -d --wait --wait-timeout 300
@@ -31,7 +25,7 @@ status:
 	$(ACTIVE_COMPOSE) ps
 
 restart:
-	@test -n "$(SERVICE)" || (echo 'Use SERVICE=frontend/backend/postgres/mailpit'; exit 1)
+	@test -n "$(SERVICE)" || (echo 'Use SERVICE=frontend/backend/postgres/mailpit/storage'; exit 1)
 	$(ACTIVE_COMPOSE) restart $(SERVICE)
 
 migrate-up:
@@ -60,14 +54,17 @@ backend-coverage:
 	cd backend && GOMODCACHE="$(CURDIR)/backend/.tools/go/pkg/mod" GOCACHE="$(CURDIR)/backend/.cache/go-build" go test ./... -coverprofile=.cache/coverage.out
 
 backend-integration:
-	docker compose -f compose.test.yaml run --build --rm backend-test
+	docker compose --env-file .env.example -f compose.test.yaml run --build --rm backend-test
+
+media-check:
+	node scripts/check-media-storage.mjs
 
 test-db-up:
-	docker compose -f compose.test.yaml up -d --wait --wait-timeout 90 postgres-test
+	docker compose --env-file .env.example -f compose.test.yaml up -d --wait --wait-timeout 120 postgres-test storage-test
 
 integration-coverage:
 	mkdir -p backend/.cache
-	docker compose -f compose.test.yaml run --build --rm -v "$(CURDIR)/backend/.cache:/coverage" backend-test go test -count=1 -tags=integration '-coverpkg=./internal/...' -coverprofile=/coverage/integration-coverage.out ./...
+	docker compose --env-file .env.example -f compose.test.yaml run --build --rm -v "$(CURDIR)/backend/.cache:/coverage" backend-test go test -count=1 -tags=integration '-coverpkg=./internal/...' -coverprofile=/coverage/integration-coverage.out ./...
 
 e2e-env:
 	node scripts/e2e-env.mjs

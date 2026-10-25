@@ -1,11 +1,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'dev', 'up', 'down', 'logs', 'status', 'restart', 'migrate-up', 'migrate-version', 'frontend-check', 'backend-check', 'frontend-test', 'frontend-coverage', 'backend-test', 'backend-coverage', 'backend-integration', 'integration-coverage', 'e2e', 'e2e-up', 'e2e-stop')]
+    [ValidateSet('init', 'dev', 'up', 'down', 'logs', 'status', 'restart', 'migrate-up', 'migrate-version', 'frontend-check', 'backend-check', 'frontend-test', 'frontend-coverage', 'backend-test', 'backend-coverage', 'backend-integration', 'integration-coverage', 'media-check', 'e2e', 'e2e-up', 'e2e-stop')]
     [string]$Action = 'dev',
     [ValidateSet('dev', 'built')]
     [string]$Mode = 'dev',
-    [ValidateSet('frontend', 'backend', 'postgres', 'mailpit', 'migrate')]
+    [ValidateSet('frontend', 'backend', 'postgres', 'mailpit', 'migrate', 'storage')]
     [string]$Service
 )
 
@@ -19,6 +19,7 @@ $testActions = @{
     'backend-coverage' = 'backend-coverage'
     'backend-integration' = 'integration'
     'integration-coverage' = 'integration-coverage'
+    'media-check' = 'media'
     'e2e' = 'e2e'
     'e2e-up' = 'e2e-up'
     'e2e-stop' = 'e2e-stop'
@@ -29,26 +30,8 @@ if ($testActions.ContainsKey($Action)) {
 }
 
 if ($Action -eq 'init') {
-    $envPath = Join-Path $projectRoot '.env'
-    if (Test-Path -LiteralPath $envPath) {
-        Write-Host 'Root .env already exists; kept unchanged.'
-        exit 0
-    }
-    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try {
-        $secretBytes = New-Object byte[] 32
-        $rng.GetBytes($secretBytes)
-        $accessSecret = ([BitConverter]::ToString($secretBytes)).Replace('-', '').ToLowerInvariant()
-        $rng.GetBytes($secretBytes)
-        $refreshSecret = ([BitConverter]::ToString($secretBytes)).Replace('-', '').ToLowerInvariant()
-    } finally {
-        $rng.Dispose()
-    }
-    $template = [IO.File]::ReadAllText((Join-Path $projectRoot '.env.example'))
-    $template = $template.Replace('GENERATE_ACCESS_SECRET', $accessSecret).Replace('GENERATE_REFRESH_SECRET', $refreshSecret)
-    [IO.File]::WriteAllText($envPath, $template, (New-Object System.Text.UTF8Encoding $false))
-    Write-Host 'Created root .env with independent random JWT secrets.'
-    exit 0
+    & node (Join-Path $PSScriptRoot 'init-env.mjs')
+    exit $LASTEXITCODE
 }
 
 $composeArgs = @('compose', '--project-directory', $projectRoot, '-f', (Join-Path $projectRoot 'compose.yaml'))

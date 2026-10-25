@@ -1,0 +1,11 @@
+# Only used with compose.test.yaml and project shopping-manager-media-check.
+# This test volume deliberately survives container recreation; never uses media_data.
+services:
+  storage-test:
+    ports: !reset []
+    tmpfs: !reset []
+    volumes:
+      - media_check_data:/data
+
+volumes:
+  media_check_data:

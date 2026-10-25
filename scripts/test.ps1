@@ -1,12 +1,17 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('frontend', 'frontend-coverage', 'backend', 'backend-coverage', 'integration', 'integration-coverage', 'test-db-up', 'e2e', 'e2e-up', 'e2e-stop')]
+    [ValidateSet('frontend', 'frontend-coverage', 'backend', 'backend-coverage', 'integration', 'integration-coverage', 'test-db-up', 'media', 'e2e', 'e2e-up', 'e2e-stop')]
     [string]$Action = 'frontend'
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+
+if ($Action -eq 'media') {
+    & node (Join-Path $PSScriptRoot 'check-media-storage.mjs')
+    exit $LASTEXITCODE
+}
 
 if ($Action -in @('e2e', 'e2e-up', 'e2e-stop')) {
     & node (Join-Path $PSScriptRoot 'e2e-env.mjs')
@@ -29,9 +34,9 @@ if ($Action -in @('e2e', 'e2e-up', 'e2e-stop')) {
 }
 
 if ($Action -in @('integration', 'integration-coverage', 'test-db-up')) {
-    $testComposeArgs = @('compose', '--project-directory', $projectRoot, '-f', (Join-Path $projectRoot 'compose.test.yaml'))
+    $testComposeArgs = @('compose', '--env-file', (Join-Path $projectRoot '.env.example'), '--project-directory', $projectRoot, '-f', (Join-Path $projectRoot 'compose.test.yaml'))
     if ($Action -eq 'test-db-up') {
-        & docker @testComposeArgs up -d --wait --wait-timeout 90 postgres-test
+        & docker @testComposeArgs up -d --wait --wait-timeout 120 postgres-test storage-test
     } elseif ($Action -eq 'integration-coverage') {
         $coveragePath = Join-Path $projectRoot 'backend/.cache'
         New-Item -ItemType Directory -Force -Path $coveragePath | Out-Null

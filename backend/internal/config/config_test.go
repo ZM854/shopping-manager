@@ -18,6 +18,8 @@ func configTestEnv(t *testing.T) {
 		"ACTIVATION_TTL", "ACTIVATION_RESEND_INTERVAL", "ACTIVATION_MAIL_TIMEOUT",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM",
 		"SMTP_AUTH_ENABLED", "SMTP_TLS_REQUIRED",
+		"S3_ENDPOINT", "S3_PUBLIC_ENDPOINT", "S3_REGION", "S3_BUCKET",
+		"S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_REQUEST_TIMEOUT", "FFMPEG_PATH", "FFPROBE_PATH",
 	} {
 		t.Setenv(key, "")
 	}
@@ -25,6 +27,12 @@ func configTestEnv(t *testing.T) {
 	t.Setenv("APP_ENV", "dev")
 	t.Setenv("JWT_ACCESS_SECRET", strings.Repeat("a", 32))
 	t.Setenv("JWT_REFRESH_SECRET", strings.Repeat("r", 32))
+	t.Setenv("S3_ENDPOINT", "https://storage.example.test")
+	t.Setenv("S3_PUBLIC_ENDPOINT", "https://media.example.test")
+	t.Setenv("S3_REGION", "us-east-1")
+	t.Setenv("S3_BUCKET", "shopping-manager-test")
+	t.Setenv("S3_ACCESS_KEY_ID", "synthetic-test-key")
+	t.Setenv("S3_SECRET_ACCESS_KEY", strings.Repeat("s", 32))
 }
 
 func TestLoadDefaultsAndOverrides(t *testing.T) {

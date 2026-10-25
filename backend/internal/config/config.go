@@ -13,6 +13,7 @@ import (
 )
 
 type Config struct {
+	Media                 MediaConfig
 	AppENV                string
 	ServerPort            string
 	PublicAPIURL          string
@@ -144,6 +145,10 @@ func Load() (Config, error) {
 		SMTPTLSRequired: smtpTLS,
 	}
 	if err := httpSettings(&cfg); err != nil {
+		return Config{}, err
+	}
+	cfg.Media, err = loadMedia(cfg.AppENV)
+	if err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

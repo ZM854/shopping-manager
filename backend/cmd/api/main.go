@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 	"github.com/ZM854/shopping-manager/backend/internal/database"
 	"github.com/ZM854/shopping-manager/backend/internal/logger"
+	"github.com/ZM854/shopping-manager/backend/internal/media"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/router"
@@ -27,6 +30,20 @@ func main() {
 	log := logger.New(appEnv)
 
 	log.Info("starting application", "env", appEnv)
+	mediaCtx, cancelMedia := context.WithTimeout(context.Background(), 45*time.Second)
+	storage := media.NewStorage(cfg.Media)
+	if err := storage.Check(mediaCtx); err != nil {
+		cancelMedia()
+		log.Error("media storage unavailable")
+		os.Exit(1)
+	}
+	if err := media.CheckTools(mediaCtx, cfg.Media); err != nil {
+		cancelMedia()
+		log.Error("media tools unavailable")
+		os.Exit(1)
+	}
+	cancelMedia()
+	log.Info("media dependencies ready")
 
 	db, err := database.NewPostgres(cfg, log)
 	if err != nil {
