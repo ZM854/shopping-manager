@@ -18,7 +18,7 @@ func CheckTools(ctx context.Context, cfg config.MediaConfig) error {
 		args    []string
 		names   []string
 	}{
-		{cfg.FFmpegPath, []string{"-hide_banner", "-encoders"}, []string{"mjpeg", "libx264", "aac"}},
+		{cfg.FFmpegPath, []string{"-hide_banner", "-encoders"}, []string{"mjpeg", "rawvideo", "libx264", "aac"}},
 		{cfg.FFmpegPath, []string{"-hide_banner", "-decoders"}, []string{"mjpeg", "png", "webp", "h264", "hevc", "vp8", "vp9", "aac", "opus", "vorbis"}},
 		{cfg.FFprobePath, []string{"-version"}, nil},
 	} {
