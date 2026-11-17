@@ -22,7 +22,22 @@ const (
 	OwnerBytesLimit  int64   = 1 << 30
 	SourceBytesLimit int64   = 200 << 20
 	UploadSlotsLimit         = 25
+	ImageInputLimit  int64   = 15 << 20
+	VideoInputLimit  int64   = 50 << 20
+	videoOutputLimit int64   = 20 << 20
+	previewLimit     int64   = 200 << 10
 )
+
+func inputLimit(p Purpose) int64 {
+	switch p {
+	case Cover, StepImage:
+		return ImageInputLimit
+	case StepVideo:
+		return VideoInputLimit
+	default:
+		return 0
+	}
+}
 
 var (
 	ErrNotFound            = errors.New("media not found")

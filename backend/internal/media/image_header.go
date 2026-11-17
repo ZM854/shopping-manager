@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	ImageInputLimit int64 = 15 << 20
-	maxImageSide          = 12000
-	maxImagePixels        = 25_000_000
+	maxImageSide   = 12000
+	maxImagePixels = 25_000_000
 )
 
 type imageHeader struct {
