@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -81,5 +82,24 @@ func TestStorageRespectsCancellation(t *testing.T) {
 	err := NewStorage(storageConfig("http://127.0.0.1:1")).Check(ctx)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation lost")
+	}
+}
+
+func TestStoragePresignsPublicEndpointWithoutNetworkOrRangeHeader(t *testing.T) {
+	cfg := storageConfig("http://internal.invalid:8333")
+	cfg.PublicEndpoint = "http://127.0.0.1:58333"
+	link, expires, err := NewStorage(cfg).SignGet(context.Background(), "checks/private.mp4")
+	if err != nil {
+		t.Fatal("Could not sign public link")
+	}
+	u, err := url.Parse(link)
+	if err != nil || u.Host != "127.0.0.1:58333" || u.Path != "/shopping-manager-media-test/checks/private.mp4" {
+		t.Fatal("Wrong endpoint or path in signed link")
+	}
+	q := u.Query()
+	signedAt, err := time.Parse("20060102T150405Z", q.Get("X-Amz-Date"))
+	if err != nil || !expires.Equal(signedAt.Add(AccessTTL)) || q.Get("X-Amz-Expires") != "300" ||
+		q.Get("X-Amz-SignedHeaders") != "host" || q.Get("X-Amz-Signature") == "" {
+		t.Fatal("Wrong signature scope or expiration")
 	}
 }

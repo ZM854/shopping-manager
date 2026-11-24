@@ -1,6 +1,7 @@
 package router
 
 import (
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/ZM854/shopping-manager/backend/internal/auth"
 	"github.com/ZM854/shopping-manager/backend/internal/config"
+	"github.com/ZM854/shopping-manager/backend/internal/media"
 	"github.com/ZM854/shopping-manager/backend/internal/middleware"
 	"github.com/ZM854/shopping-manager/backend/internal/recipe"
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
@@ -19,6 +21,7 @@ func New(
 	log *slog.Logger,
 	shoppingHandler *shopping.Handler,
 	recipeHandler *recipe.Handler,
+	mediaHandler *media.Handler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *middleware.AuthMiddleware,
 	cfg config.Config,
@@ -36,9 +39,11 @@ func New(
 			c.Header("Cache-Control", "no-store")
 		}
 		path := c.Request.URL.Path
-		if path == "/api/recipe-categories" || path == "/api/recipes" || strings.HasPrefix(path, "/api/recipes/") {
+		if path == "/api/recipe-categories" || path == "/api/recipes" || strings.HasPrefix(path, "/api/recipes/") || path == "/api/recipe-media" || strings.HasPrefix(path, "/api/recipe-media/") {
 			c.Header("Cache-Control", "no-store")
 		}
+		c.Next()
+		drainRejectedMedia(c)
 	})
 	router.Use(middleware.CheckOrigin(cfg.AllowedOrigins))
 
@@ -84,6 +89,25 @@ func New(
 	privateAPI.Use(authMiddleware.HandleAuth())
 	shoppingHandler.Register(privateAPI)
 	recipeHandler.Register(privateAPI)
+	if mediaHandler != nil {
+		mediaHandler.Register(privateAPI)
+	}
 
 	return router
+}
+
+
+func drainRejectedMedia(c *gin.Context) {
+	path := c.Request.URL.Path
+	if c.Writer.Status() < 400 || c.Request.Method != http.MethodPut ||
+		!strings.HasPrefix(path, "/api/recipe-media/") || !strings.HasSuffix(path, "/content") {
+		return
+	}
+	controller := http.NewResponseController(c.Writer)
+	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Second))
+	const maxDiscard int64 = (50 << 20) + 1
+	n, err := io.Copy(io.Discard, io.LimitReader(c.Request.Body, maxDiscard))
+	if err == nil && n < maxDiscard {
+		_ = controller.SetReadDeadline(time.Time{})
+	}
 }

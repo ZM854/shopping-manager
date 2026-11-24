@@ -18,6 +18,20 @@ import (
 	"github.com/ZM854/shopping-manager/backend/internal/shopping"
 )
 
+func TestRejectedMediaBodyIsDrainedWithoutChangingResponse(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	engine := New(log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), nil,
+		auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), config.Config{AllowedOrigins: []string{"http://client.example.test"}})
+	body := bytes.NewReader(make([]byte, 2<<20))
+	req := httptest.NewRequest("PUT", "/api/recipe-media/1/content", body)
+	req.Header.Set("Origin", "https://foreign.example.test")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != 403 || w.Header().Get("Cache-Control") != "no-store" || body.Len() != 0 {
+		t.Fatal("Rejected body retained or response changed", w.Code, body.Len())
+	}
+}
+
 func TestRateLimitAndProxyTrust(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, trusted := range []bool{false, true} {
@@ -26,7 +40,7 @@ func TestRateLimitAndProxyTrust(t *testing.T) {
 			cfg.TrustedProxies = []string{"127.0.0.1"}
 		}
 		engine := New(
-			log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log),
+			log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), nil,
 			auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil), cfg,
 		)
 		for index := range 3 {
@@ -61,7 +75,7 @@ func TestAPIPrefixAndAuthorization(t *testing.T) {
 	engine := New(
 		log,
 		shopping.NewHandler(nil, log),
-		recipe.NewHandler(nil, log),
+		recipe.NewHandler(nil, log), nil,
 		auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(nil),
 		config.Config{AllowedOrigins: []string{"http://localhost:5173"}, AuthLoginLimit: 1000, AuthRegistrationLimit: 1000, AuthResendLimit: 1000},
@@ -130,7 +144,7 @@ func TestRecipeMiddlewarePrivacyAndNoStore(t *testing.T) {
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
 	engine := New(
-		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
+		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), nil, auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(sharingTokenValidator{}),
 		config.Config{AllowedOrigins: []string{"http://client.example.test"}},
 	)
@@ -197,7 +211,7 @@ func TestSharingMiddlewarePrivacyAndNoStore(t *testing.T) {
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
 	engine := New(
-		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), auth.NewAuthHandler(log, nil, false),
+		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), nil, auth.NewAuthHandler(log, nil, false),
 		middleware.NewAuthMiddleware(sharingTokenValidator{}),
 		config.Config{AllowedOrigins: []string{"http://client.example.test"}},
 	)
@@ -259,7 +273,7 @@ func TestSharingMiddlewarePrivacyAndNoStore(t *testing.T) {
 func TestCORSAllowedAndRejectedOrigins(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	engine := New(
-		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log),
+		log, shopping.NewHandler(nil, log), recipe.NewHandler(nil, log), nil,
 		auth.NewAuthHandler(log, nil, false), middleware.NewAuthMiddleware(nil),
 		config.Config{
 			AllowedOrigins: []string{"http://client.example.test"},
