@@ -27,7 +27,7 @@ type recipeRepositoryFixture struct {
 func newRecipeRepositoryFixture(t *testing.T) *recipeRepositoryFixture {
 	t.Helper()
 	pool := testdb.New(t)
-	testdb.ApplyMigrations(t, pool, 0, 11)
+	testdb.ApplyMigrations(t, pool, 0, 12)
 	return &recipeRepositoryFixture{
 		pool: pool, repo: recipe.NewRepository(pool),
 		first:  migrationUser(t, pool, "recipe-first@example.test"),
@@ -44,7 +44,7 @@ func recipeRepositoryRequest(title string) recipe.SaveRequest {
 			{Name: "Соль", Unit: "по вкусу"},
 			{Name: "Мука", Quantity: &quantity},
 		},
-		Steps: []recipe.StepRequest{{Text: "Смешать\n\tтщательно"}, {Text: "Испечь"}},
+		Steps: []recipe.StepRequest{{Text: "Смешать\n\tтщательно", MediaIDs: []string{}}, {Text: "Испечь", MediaIDs: []string{}}},
 	}
 }
 

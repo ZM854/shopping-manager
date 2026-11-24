@@ -4,12 +4,34 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/ZM854/shopping-manager/backend/internal/config"
 )
+
+func runMediaCommand(ctx context.Context, cmd *exec.Cmd) error {
+	cmd.WaitDelay = time.Second
+	if cmd.Stdout == nil {
+		cmd.Stdout = io.Discard
+	}
+	if cmd.Stderr == nil {
+		cmd.Stderr = io.Discard
+	}
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return uploadError("media_processing_timeout")
+		}
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			return uploadError("media_processor_unavailable")
+		}
+		return uploadError("invalid_media")
+	}
+	return nil
+}
 
 // CheckTools is a startup dependency check
 func CheckTools(ctx context.Context, cfg config.MediaConfig) error {
