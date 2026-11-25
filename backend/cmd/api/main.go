@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -37,6 +39,11 @@ func main() {
 		log.Error("media storage unavailable")
 		os.Exit(1)
 	}
+	if err := storage.ConfigureBrowserAccess(mediaCtx, cfg.AllowedOrigins); err != nil {
+		cancelMedia()
+		log.Error("media storage CORS unavailable")
+		os.Exit(1)
+	}
 	if err := media.CheckTools(mediaCtx, cfg.Media); err != nil {
 		cancelMedia()
 		log.Error("media tools unavailable")
@@ -63,6 +70,25 @@ func main() {
 	recipeRepo := recipe.NewRepository(db)
 	recipeService := recipe.NewService(recipeRepo)
 	recipeHandler := recipe.NewHandler(recipeService, log)
+	mediaRepo := media.NewRepository(db)
+	mediaService := media.NewService(mediaRepo)
+	processor := media.MediaProcessor{
+		Image: media.ImageProcessor{FFmpegPath: cfg.Media.FFmpegPath},
+		Video: media.VideoProcessor{FFmpegPath: cfg.Media.FFmpegPath, FFprobePath: cfg.Media.FFprobePath},
+	}
+	uploader, err := media.NewUploader(mediaService, storage, processor, filepath.Join(os.TempDir(), "shopping-manager-media"))
+	if err != nil {
+		log.Error("media temporary directory unavailable")
+		os.Exit(1)
+	}
+	recoverCtx, cancelRecover := context.WithTimeout(context.Background(), 30*time.Second)
+	err = mediaRepo.RecoverInterrupted(recoverCtx)
+	cancelRecover()
+	if err != nil {
+		log.Error("media recovery failed")
+		os.Exit(1)
+	}
+	mediaHandler := media.NewHandler(mediaService, uploader, media.NewAccessService(mediaRepo, storage), log)
 
 	tokenRepo := auth.NewTokenRepository(db, log)
 	tokenService := auth.NewTokenService(
@@ -118,6 +144,7 @@ func main() {
 		log,
 		shoppingHandler,
 		recipeHandler,
+		mediaHandler,
 		authHandler,
 		authMiddleware,
 		cfg,
@@ -127,7 +154,8 @@ func main() {
 
 	log.Info("http server started", "addres", addr)
 
-	if err := router.Run(addr); err != nil {
+	server := &http.Server{Addr: addr, Handler: router, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 70 * time.Second, WriteTimeout: 5 * time.Minute, IdleTimeout: 60 * time.Second}
+	if err := server.ListenAndServe(); err != nil {
 		log.Error("http server stopped", "error", err)
 		os.Exit(1)
 	}

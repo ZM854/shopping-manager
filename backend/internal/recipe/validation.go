@@ -9,6 +9,13 @@ import (
 	"unicode/utf8"
 )
 
+const (
+	maxStepMedia   = 4
+	maxRecipeMedia = 20 // excludes cover
+	maxRecipeVideo = 5
+	maxRecipeBytes = 150 << 20
+)
+
 var (
 	ErrNotFound            = errors.New("recipe not found")
 	ErrIdempotencyConflict = errors.New("recipe idempotency conflict")
@@ -117,6 +124,15 @@ func normalizeSaveRequest(req SaveRequest) (SaveRequest, error) {
 		Ingredients:        make([]IngredientRequest, len(req.Ingredients)),
 		Steps:              make([]StepRequest, len(req.Steps)),
 	}
+	seenMedia := make(map[string]bool)
+	if req.CoverMediaID != nil {
+		value := *req.CoverMediaID
+		if _, err := ParseID(value); err != nil {
+			return SaveRequest{}, invalid("coverMediaId")
+		}
+		seenMedia[value] = true
+		result.CoverMediaID = &value
+	}
 	for i, ingredient := range req.Ingredients {
 		prefix := "ingredients." + strconv.Itoa(i) + "."
 		name, err := normalizeText(ingredient.Name, prefix+"name", MaxIngredientNameLength, true)
@@ -133,7 +149,7 @@ func normalizeSaveRequest(req SaveRequest) (SaveRequest, error) {
 		}
 		result.Ingredients[i] = IngredientRequest{Name: name, Quantity: quantity, Unit: unit}
 	}
-	totalTextLength := 0
+	totalTextLength, totalMedia := 0, 0
 	stepIDs := make(map[string]bool, len(req.Steps))
 	for i, step := range req.Steps {
 		var id *string
@@ -153,7 +169,18 @@ func normalizeSaveRequest(req SaveRequest) (SaveRequest, error) {
 		if totalTextLength > MaxTotalStepTextLength {
 			return SaveRequest{}, invalid("steps")
 		}
-		result.Steps[i] = StepRequest{ID: id, Text: text}
+		field := "steps." + strconv.Itoa(i) + ".mediaIds"
+		totalMedia += len(step.MediaIDs)
+		if len(step.MediaIDs) > maxStepMedia || totalMedia > maxRecipeMedia {
+			return SaveRequest{}, invalid(field)
+		}
+		for _, value := range step.MediaIDs {
+			if _, err := ParseID(value); err != nil || seenMedia[value] {
+				return SaveRequest{}, invalid(field)
+			}
+			seenMedia[value] = true
+		}
+		result.Steps[i] = StepRequest{ID: id, Text: text, MediaIDs: append([]string{}, step.MediaIDs...)}
 	}
 	return result, nil
 }

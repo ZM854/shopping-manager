@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const handlerBody = `{"title":"Пирог","cookingTimeMinutes":30,"categoryCode":"baking","ingredients":[{"name":"Мука","quantity":"2.500","unit":"г"},{"name":"Соль","quantity":null},{"name":"Вода"}],"steps":[{"text":"Смешать\n\tИспечь"}]}`
+const handlerBody = `{"title":"Пирог","cookingTimeMinutes":30,"categoryCode":"baking","ingredients":[{"name":"Мука","quantity":"2.500","unit":"г"},{"name":"Соль","quantity":null},{"name":"Вода"}],"coverMediaId":null,"steps":[{"text":"Смешать\n\tИспечь","mediaIds":[]}]}`
 
 type handlerService struct {
 	RecipeService
@@ -152,6 +152,8 @@ func TestHandlerStrictJSON(t *testing.T) {
 		`{"ingredients":[{"id":"1"}]}`, `{"ingredients":[{"quantity":"1","quantity":null}]}`,
 		`{"steps":[{"text":"one","text":"two"}]}`, `{"steps":[{"Text":"one"}]}`,
 		`{"steps":[{"position":1}]}`, `{"steps":[{"photo":"url"}]}`,
+		`{"coverMediaId":1}`, `{"coverMediaId":null,"coverMediaId":"1"}`,
+		`{"steps":[{"mediaIds":null}]}`, `{"steps":[{"mediaIds":[null]}]}`, `{"steps":[{"mediaIds":[3]}]}`,
 		`{"title":null}`, `{"cookingTimeMinutes":null}`, `{"categoryCode":null}`,
 		`{"ingredients":null}`, `{"steps":null}`, `{"ingredients":[null]}`, `{"steps":[null]}`,
 		`{"ingredients":[{"name":null}]}`, `{"ingredients":[{"unit":null}]}`, `{"steps":[{"text":null}]}`,
@@ -180,6 +182,21 @@ func TestHandlerStrictJSON(t *testing.T) {
 				t.Fatalf("Случай %d %s: %d %s", i, method, w.Code, w.Body.String())
 			}
 			handlerError(t, w, 400, "invalid_request")
+		}
+	}
+}
+
+func TestHandlerPutRequiresExplicitMediaFields(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	for _, tc := range []struct{ remove, field string }{
+		{`"coverMediaId":null,`, "coverMediaId"},
+		{`,"mediaIds":[]`, "steps.0.mediaIds"},
+	} {
+		body := strings.Replace(handlerBody, tc.remove, "", 1)
+		engine := handlerEngine(nil, int64(7), log)
+		err := handlerError(t, handlerRequest(engine, "PUT", "/api/recipes/1", body, -1), 400, "validation_failed")
+		if err.FieldErrors[tc.field] == "" {
+			t.Fatalf("Отсутствующее поле %s не указано", tc.field)
 		}
 	}
 }

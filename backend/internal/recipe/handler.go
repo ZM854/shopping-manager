@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ZM854/shopping-manager/backend/internal/media"
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,13 +43,28 @@ func (h *Handler) fail(c *gin.Context, err error) {
 		result = ErrorResponse{Code: "validation_failed", Message: "Проверьте поля запроса", FieldErrors: validation.Fields}
 	case errors.Is(err, ErrNotFound):
 		status = http.StatusNotFound
-		result = ErrorResponse{Code: "not_found", Message: "Рецепт не найден"}
+		result = ErrorResponse{Code: "not_found", Message: "Ресурс не найден"}
 	case errors.Is(err, ErrIdempotencyConflict):
 		status = http.StatusConflict
 		result = ErrorResponse{Code: "idempotency_conflict", Message: "Ключ уже использован для другого запроса"}
 	case errors.Is(err, ErrResourceDeleted):
 		status = http.StatusConflict
 		result = ErrorResponse{Code: "resource_deleted", Message: "Созданный рецепт удалён"}
+	case errors.Is(err, media.ErrUploadExpired):
+		status = http.StatusConflict
+		result = ErrorResponse{Code: "upload_expired", Message: "Срок загрузки истёк"}
+	case errors.Is(err, media.ErrMediaNotReady):
+		status = http.StatusConflict
+		result = ErrorResponse{Code: "media_not_ready", Message: "Файл ещё не готов"}
+	case errors.Is(err, media.ErrMediaUnavailable):
+		status = http.StatusConflict
+		result = ErrorResponse{Code: "media_unavailable", Message: "Файл недоступен"}
+	case errors.Is(err, media.ErrAlreadyAttached):
+		status = http.StatusConflict
+		result = ErrorResponse{Code: "media_already_attached", Message: "Файл уже прикреплён к другому рецепту"}
+	case errors.Is(err, media.ErrMediaQuota):
+		status = http.StatusConflict
+		result = ErrorResponse{Code: "media_quota_exceeded", Message: "Общий размер вложений рецепта превышает 150 МиБ"}
 	}
 	if status == http.StatusInternalServerError {
 		h.log.Error("recipe request failed", "method", c.Request.Method, "route", c.FullPath())

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -25,27 +26,57 @@ func decodeSaveRequest(c *gin.Context) (SaveRequest, error) {
 	if !utf8.Valid(data) {
 		return SaveRequest{}, errInvalidJSON
 	}
-	fields, err := decodeObject(data, "title", "cookingTimeMinutes", "categoryCode", "ingredients", "steps")
+	fields, err := decodeObject(data, "title", "cookingTimeMinutes", "categoryCode", "ingredients", "steps", "coverMediaId")
 	if err != nil {
 		return SaveRequest{}, err
 	}
+	put := c.Request.Method == http.MethodPut
+	var missingField string
+	if _, ok := fields["coverMediaId"]; put && !ok {
+		missingField = "coverMediaId"
+	}
 	if raw, ok := fields["ingredients"]; ok {
-		if err := checkArray(raw, "ingredients", MaxIngredients, "name", "quantity", "unit"); err != nil {
+		if err := checkArray(raw, "ingredients", MaxIngredients, nil, "name", "quantity", "unit"); err != nil {
 			return SaveRequest{}, err
 		}
 	}
 	if raw, ok := fields["steps"]; ok {
-		allowed := []string{"text"}
-		if c.Request.Method == http.MethodPut {
+		allowed := []string{"text", "mediaIds"}
+		if put {
 			allowed = append(allowed, "id")
 		}
-		if err := checkArray(raw, "steps", MaxSteps, allowed...); err != nil {
+		if err := checkArray(raw, "steps", MaxSteps, func(i int, step map[string]json.RawMessage) error {
+			field := "steps." + strconv.Itoa(i) + ".mediaIds"
+			rawIDs, ok := step["mediaIds"]
+			if !ok {
+				if put && missingField == "" {
+					missingField = field
+				}
+				return nil
+			}
+			var ids []*string
+			if err := json.Unmarshal(rawIDs, &ids); err != nil {
+				return errInvalidJSON
+			}
+			if len(ids) > maxStepMedia {
+				return invalid(field)
+			}
+			for _, id := range ids {
+				if id == nil {
+					return errInvalidJSON
+				}
+			}
+			return nil
+		}, allowed...); err != nil {
 			return SaveRequest{}, err
 		}
 	}
 	var req SaveRequest
 	if err := json.Unmarshal(data, &req); err != nil {
 		return SaveRequest{}, errInvalidJSON
+	}
+	if missingField != "" {
+		return SaveRequest{}, invalid(missingField)
 	}
 	return req, nil
 }
@@ -82,7 +113,7 @@ func decodeObject(data []byte, allowed ...string) (map[string]json.RawMessage, e
 		if err := decoder.Decode(&raw); err != nil {
 			return nil, errInvalidJSON
 		}
-		if key != "quantity" && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		if key != "quantity" && key != "coverMediaId" && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return nil, errInvalidJSON
 		}
 		fields[key] = raw
@@ -93,7 +124,7 @@ func decodeObject(data []byte, allowed ...string) (map[string]json.RawMessage, e
 	return fields, nil
 }
 
-func checkArray(data []byte, field string, max int, allowed ...string) error {
+func checkArray(data []byte, field string, max int, validate func(int, map[string]json.RawMessage) error, allowed ...string) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('[') {
 		return errInvalidJSON
@@ -108,8 +139,14 @@ func checkArray(data []byte, field string, max int, allowed ...string) error {
 		if err := decoder.Decode(&raw); err != nil {
 			return errInvalidJSON
 		}
-		if _, err := decodeObject(raw, allowed...); err != nil {
+		fields, err := decodeObject(raw, allowed...)
+		if err != nil {
 			return err
+		}
+		if validate != nil {
+			if err := validate(count-1, fields); err != nil {
+				return err
+			}
 		}
 	}
 	return finishJSON(decoder, ']')

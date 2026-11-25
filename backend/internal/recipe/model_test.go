@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/ZM854/shopping-manager/backend/internal/media"
 )
 
 func jsonFields(t *testing.T, value any, keys ...string) map[string]json.RawMessage {
@@ -39,10 +41,10 @@ func TestRecipeDTOJSONPreservesIDDecimalAndPlainText(t *testing.T) {
 			{Position: 1, Name: "Яйца", Quantity: quantityPointer("999999999.999")},
 			{Position: 2, Name: "Соль", Unit: "по вкусу"},
 		},
-		Steps: []Step{{ID: 9223372036854775807, Position: 1, Text: "Взбить яйца.\n\tПриготовить. <b>Текст</b>"}},
+		Steps: []Step{{ID: 9223372036854775807, Position: 1, Text: "Взбить яйца.\n\tПриготовить. <b>Текст</b>", Media: []media.MediaDTO{}}},
 	}
 	fields := jsonFields(t, recipe,
-		"id", "title", "cookingTimeMinutes", "categoryCode", "createdAt", "updatedAt", "ingredients", "steps")
+		"id", "title", "cookingTimeMinutes", "categoryCode", "createdAt", "updatedAt", "cover", "ingredients", "steps")
 	if string(fields["id"]) != `"9223372036854775807"` || string(fields["cookingTimeMinutes"]) != "15" {
 		t.Fatal("ID должен быть строкой, а время — целым числом")
 	}
@@ -60,9 +62,9 @@ func TestRecipeDTOJSONPreservesIDDecimalAndPlainText(t *testing.T) {
 	if string(second["quantity"]) != "null" {
 		t.Fatal("Отсутствующее количество должно быть явным null")
 	}
-	step := jsonFields(t, recipe.Steps[0], "id", "position", "text")
-	if string(step["id"]) != `"9223372036854775807"` {
-		t.Fatal("ID шага теряет точность")
+	step := jsonFields(t, recipe.Steps[0], "id", "position", "text", "media")
+	if string(step["id"]) != `"9223372036854775807"` || string(step["media"]) != "[]" || string(fields["cover"]) != "null" {
+		t.Fatal("Неверный ID шага или пустые поля медиа")
 	}
 	data, err := json.Marshal(recipe)
 	if err != nil {
@@ -72,7 +74,7 @@ func TestRecipeDTOJSONPreservesIDDecimalAndPlainText(t *testing.T) {
 	if err := json.Unmarshal(data, &replay); err != nil || !reflect.DeepEqual(replay, recipe) {
 		t.Fatal("DTO изменяется при сохранении и чтении replay", err)
 	}
-	jsonFields(t, recipe.Summary, "id", "title", "cookingTimeMinutes", "categoryCode", "createdAt", "updatedAt")
+	jsonFields(t, recipe.Summary, "id", "title", "cookingTimeMinutes", "categoryCode", "createdAt", "updatedAt", "cover")
 }
 
 func TestSaveRequestJSONDefaultsAndServerFields(t *testing.T) {
@@ -92,9 +94,9 @@ func TestSaveRequestJSONDefaultsAndServerFields(t *testing.T) {
 	if normalized.Ingredients[1].Quantity != nil || normalized.Ingredients[1].Unit != "" {
 		t.Fatal("Пропущенные количество и единица должны нормализоваться в null и пустую строку")
 	}
-	jsonFields(t, normalized, "title", "cookingTimeMinutes", "categoryCode", "ingredients", "steps")
+	jsonFields(t, normalized, "title", "cookingTimeMinutes", "categoryCode", "ingredients", "steps", "coverMediaId")
 	jsonFields(t, normalized.Ingredients[0], "name", "quantity", "unit")
-	jsonFields(t, normalized.Steps[0], "text")
+	jsonFields(t, normalized.Steps[0], "text", "mediaIds")
 }
 
 func TestSaveRequestRejectsWrongJSONTypes(t *testing.T) {

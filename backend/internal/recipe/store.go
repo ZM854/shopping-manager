@@ -12,6 +12,7 @@ type Reader interface {
 
 type Transaction interface {
 	Reader
+	LockOwner(context.Context, int64) error
 	LockRecipe(context.Context, int64, int64) error
 	CreateRecipe(context.Context, int64, SaveRequest) (Recipe, error)
 	UpdateRecipe(context.Context, int64, int64, SaveRequest) (Recipe, error)

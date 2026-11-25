@@ -105,7 +105,7 @@ func TestReplayPreservesOriginalStepIdentity(t *testing.T) {
 			if err != nil || string(encoded) != string(body) {
 				t.Fatal("Replay изменил поля исходного снимка")
 			}
-			if !reflect.DeepEqual(tx.calls, []string{"claim", "get"}) {
+			if !reflect.DeepEqual(tx.calls, []string{"owner", "claim", "get"}) {
 				t.Fatal("Replay записал рецепт повторно или пропустил проверку доступа")
 			}
 		})

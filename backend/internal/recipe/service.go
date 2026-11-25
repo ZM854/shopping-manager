@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strconv"
 	"time"
+
+	"github.com/ZM854/shopping-manager/backend/internal/media"
 )
 
 const replayRetention = 24 * time.Hour
@@ -57,6 +59,9 @@ func (s *Service) CreateRecipe(ctx context.Context, owner int64, key string, req
 	hash := hex.EncodeToString(sum[:])
 	var result Recipe
 	err = s.store.InTx(ctx, func(tx Transaction) error {
+		if err := tx.LockOwner(ctx, owner); err != nil {
+			return err
+		}
 		replay, err := tx.Claim(ctx, owner, key, hash, time.Now().UTC().Add(replayRetention))
 		if err != nil {
 			return err
@@ -106,6 +111,9 @@ func (s *Service) UpdateRecipe(ctx context.Context, owner, id int64, req SaveReq
 	}
 	var result Recipe
 	err = s.store.InTx(ctx, func(tx Transaction) error {
+		if err := tx.LockOwner(ctx, owner); err != nil {
+			return err
+		}
 		if err := tx.LockRecipe(ctx, owner, id); err != nil {
 			return err
 		}
@@ -121,6 +129,9 @@ func (s *Service) UpdateRecipe(ctx context.Context, owner, id int64, req SaveReq
 
 func (s *Service) DeleteRecipe(ctx context.Context, owner, id int64) error {
 	err := s.store.InTx(ctx, func(tx Transaction) error {
+		if err := tx.LockOwner(ctx, owner); err != nil {
+			return err
+		}
 		if err := tx.LockRecipe(ctx, owner, id); err != nil {
 			return err
 		}
@@ -138,7 +149,12 @@ func safeStorageError(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, domain := range []error{ErrNotFound, ErrIdempotencyConflict, ErrResourceDeleted} {
+	var validation *ValidationError
+	if errors.As(err, &validation) {
+		return validation
+	}
+	for _, domain := range []error{ErrNotFound, ErrIdempotencyConflict, ErrResourceDeleted,
+		media.ErrUploadExpired, media.ErrMediaNotReady, media.ErrMediaUnavailable, media.ErrAlreadyAttached, media.ErrMediaQuota} {
 		if errors.Is(err, domain) {
 			return domain
 		}

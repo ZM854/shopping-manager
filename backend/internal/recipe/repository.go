@@ -66,6 +66,7 @@ func scanSummary(row pgx.Row) (Summary, error) {
 	if err := row.Scan(
 		&result.ID, &result.Title, &result.CookingTimeMinutes,
 		&result.CategoryCode, &result.CreatedAt, &result.UpdatedAt,
+		&result.Cover,
 	); err != nil {
 		return Summary{}, missing(err)
 	}
@@ -76,8 +77,9 @@ func scanSummary(row pgx.Row) (Summary, error) {
 
 func (r *Repository) GetRecipes(ctx context.Context, owner int64) ([]Summary, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, title, cooking_time_minutes, category_code, created_at, updated_at
-		FROM recipes WHERE owner_id = $1 ORDER BY id`, owner)
+		SELECT r.id, r.title, r.cooking_time_minutes, r.category_code, r.created_at, r.updated_at,
+			`+recipeCoverJSON+`
+		FROM recipes r WHERE r.owner_id = $1 ORDER BY r.id`, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +101,7 @@ func (r *Repository) GetRecipe(ctx context.Context, owner, id int64) (Recipe, er
 
 	err := r.db.QueryRow(ctx, `
 		SELECT r.id, r.title, r.cooking_time_minutes, r.category_code,
-			r.created_at, r.updated_at,
+			r.created_at, r.updated_at, `+recipeCoverJSON+`,
 			COALESCE((
 				SELECT jsonb_agg(jsonb_build_object(
 					'position', i.position, 'name', i.name,
@@ -109,7 +111,13 @@ func (r *Repository) GetRecipe(ctx context.Context, owner, id int64) (Recipe, er
 			), '[]'::jsonb),
 			COALESCE((
 				SELECT jsonb_agg(jsonb_build_object(
-					'id', s.id::text, 'position', s.position, 'text', s.text
+					'id', s.id::text, 'position', s.position, 'text', s.text,
+					'media', COALESCE((
+						SELECT jsonb_agg(`+recipeMediaJSON+` ORDER BY m.position)
+						FROM recipe_media m
+						WHERE m.recipe_id = r.id AND m.step_id = s.id AND m.owner_id = r.owner_id
+							AND m.state = 'attached'
+					), '[]'::jsonb)
 				) ORDER BY s.position)
 				FROM recipe_steps s WHERE s.recipe_id = r.id
 			), '[]'::jsonb)
@@ -117,6 +125,7 @@ func (r *Repository) GetRecipe(ctx context.Context, owner, id int64) (Recipe, er
 	).Scan(
 		&result.ID, &result.Title, &result.CookingTimeMinutes,
 		&result.CategoryCode, &result.CreatedAt, &result.UpdatedAt,
+		&result.Cover,
 		&ingredients, &steps,
 	)
 	if err != nil {
@@ -131,6 +140,11 @@ func (r *Repository) GetRecipe(ctx context.Context, owner, id int64) (Recipe, er
 	result.CreatedAt = result.CreatedAt.UTC()
 	result.UpdatedAt = result.UpdatedAt.UTC()
 	return result, nil
+}
+
+func (r *transactionRepository) LockOwner(ctx context.Context, owner int64) error {
+	var found int64
+	return missing(r.db.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, owner).Scan(&found))
 }
 
 func (r *transactionRepository) LockRecipe(ctx context.Context, owner, id int64) error {
@@ -174,6 +188,13 @@ func (r *transactionRepository) UpdateRecipe(ctx context.Context, owner, id int6
 }
 
 func (r *transactionRepository) replaceContents(ctx context.Context, owner, id int64, req SaveRequest) error {
+	targets, err := mediaTargets(req)
+	if err != nil {
+		return err
+	}
+	if err := r.prepareRecipeMedia(ctx, owner, id, targets); err != nil {
+		return err
+	}
 	if _, err := r.db.Exec(ctx, `
 		DELETE FROM recipe_ingredients i USING recipes r
 		WHERE i.recipe_id = r.id AND r.owner_id = $1 AND r.id = $2`, owner, id,
@@ -196,7 +217,10 @@ func (r *transactionRepository) replaceContents(ctx context.Context, owner, id i
 	); err != nil {
 		return err
 	}
-	return r.replaceSteps(ctx, owner, id, req.Steps)
+	if err := r.replaceSteps(ctx, owner, id, req.Steps); err != nil {
+		return err
+	}
+	return r.attachRecipeMedia(ctx, owner, id, targets)
 }
 
 func (r *transactionRepository) replaceSteps(ctx context.Context, owner, id int64, steps []StepRequest) error {
@@ -253,6 +277,9 @@ func (r *transactionRepository) replaceSteps(ctx context.Context, owner, id int6
 }
 
 func (r *transactionRepository) DeleteRecipe(ctx context.Context, owner, id int64) error {
+	if _, err := r.lockRecipeMedia(ctx, owner, id, nil); err != nil {
+		return err
+	}
 	return changed(r.db.Exec(ctx, `
 		DELETE FROM recipes WHERE owner_id = $1 AND id = $2`, owner, id,
 	))

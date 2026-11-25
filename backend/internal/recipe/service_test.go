@@ -64,6 +64,10 @@ func (tx *serviceTransaction) Claim(_ context.Context, owner int64, key, hash st
 	return replay, tx.operation("claim", owner)
 }
 
+func (tx *serviceTransaction) LockOwner(_ context.Context, owner int64) error {
+	return tx.operation("owner", owner)
+}
+
 func (tx *serviceTransaction) CreateRecipe(_ context.Context, owner int64, req SaveRequest) (Recipe, error) {
 	tx.normalized = req
 	return tx.result, tx.operation("create", owner)
@@ -179,15 +183,15 @@ func TestServiceNormalizedSave(t *testing.T) {
 		want := SaveRequest{
 			Title: "Пирог", CookingTimeMinutes: 30, CategoryCode: "baking",
 			Ingredients: []IngredientRequest{{Name: "Мука", Quantity: &wantQuantity, Unit: "г"}},
-			Steps:       []StepRequest{{Text: "Смешать\n\tИспечь"}},
+			Steps:       []StepRequest{{Text: "Смешать\n\tИспечь", MediaIDs: []string{}}},
 		}
 		after, _ := json.Marshal(req)
 		if !reflect.DeepEqual(tx.normalized, want) || string(before) != string(after) {
 			t.Fatalf("Нормализация/изменение исходника: %+v", tx.normalized)
 		}
-		calls := []string{"lock", "update"}
+		calls := []string{"owner", "lock", "update"}
 		if create {
-			calls = []string{"claim", "create", "save"}
+			calls = []string{"owner", "claim", "create", "save"}
 			if !reflect.DeepEqual(tx.saved, got) || tx.expires.Before(started.Add(replayRetention)) ||
 				tx.expires.After(time.Now().UTC().Add(replayRetention)) {
 				t.Fatal("Неверный replay или срок хранения")
@@ -203,9 +207,9 @@ func TestServiceWriteFailures(t *testing.T) {
 	ctx := context.Background()
 	sentinel := errors.New("storage failure with private recipe text")
 	for operation, stages := range map[string][]string{
-		"create": {"begin", "claim", "create", "save", "commit"},
-		"update": {"begin", "lock", "update", "commit"},
-		"delete": {"begin", "lock", "delete", "commit"},
+		"create": {"begin", "owner", "claim", "create", "save", "commit"},
+		"update": {"begin", "owner", "lock", "update", "commit"},
+		"delete": {"begin", "owner", "lock", "delete", "commit"},
 	} {
 		for _, stage := range stages {
 			t.Run(operation+"/"+stage, func(t *testing.T) {
@@ -238,7 +242,7 @@ func TestServiceWriteFailures(t *testing.T) {
 	}
 	tx := newServiceTransaction(t)
 	if err := NewService(serviceStore{tx: tx}).DeleteRecipe(ctx, 7, 11); err != nil ||
-		!reflect.DeepEqual(tx.calls, []string{"lock", "delete"}) {
+		!reflect.DeepEqual(tx.calls, []string{"owner", "lock", "delete"}) {
 		t.Fatalf("Удаление без предварительной блокировки: %v, %v", tx.calls, err)
 	}
 }
@@ -306,9 +310,9 @@ func TestServiceReplay(t *testing.T) {
 				(tc.wantErr != nil && !errors.Is(err, tc.wantErr)) {
 				t.Fatalf("Ошибка replay: %+v, %v", got, err)
 			}
-			calls := []string{"claim", "get"}
+			calls := []string{"owner", "claim", "get"}
 			if tc.name == "conflict" {
-				calls = []string{"claim"}
+				calls = []string{"owner", "claim"}
 			}
 			if !reflect.DeepEqual(tx.calls, calls) {
 				t.Fatalf("Replay изменяет рецепт или пропускает проверку доступа: %v", tx.calls)

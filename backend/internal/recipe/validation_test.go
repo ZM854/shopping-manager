@@ -57,7 +57,7 @@ func TestNormalizeSavePreservesOrderAndDoesNotMutateInput(t *testing.T) {
 			{Name: "Яйца", Quantity: quantityPointer("0.1"), Unit: "кг"},
 		},
 		Steps: []StepRequest{
-			{Text: "Первый шаг.\n\tОтступ.\nЕщё строка."}, {Text: "Второй шаг."},
+			{Text: "Первый шаг.\n\tОтступ.\nЕщё строка.", MediaIDs: []string{}}, {Text: "Второй шаг.", MediaIDs: []string{}},
 		},
 	}
 	if !reflect.DeepEqual(got, want) {

@@ -1,6 +1,10 @@
 package recipe
 
-import "time"
+import (
+	"time"
+
+	"github.com/ZM854/shopping-manager/backend/internal/media"
+)
 
 const (
 	MaxTitleLength          = 200
@@ -18,14 +22,14 @@ const (
 	MaxJSONBodyBytes        = 1024 * 1024
 )
 
-// Summary — краткий DTO коллекции без содержимого и данных владельца.
 type Summary struct {
-	ID                 int64     `json:"id,string"`
-	Title              string    `json:"title"`
-	CookingTimeMinutes int       `json:"cookingTimeMinutes"`
-	CategoryCode       string    `json:"categoryCode"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
+	ID                 int64           `json:"id,string"`
+	Title              string          `json:"title"`
+	CookingTimeMinutes int             `json:"cookingTimeMinutes"`
+	CategoryCode       string          `json:"categoryCode"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	UpdatedAt          time.Time       `json:"updatedAt"`
+	Cover              *media.MediaDTO `json:"cover"`
 }
 
 type Recipe struct {
@@ -42,9 +46,10 @@ type Ingredient struct {
 }
 
 type Step struct {
-	ID       int64  `json:"id,string"`
-	Position int    `json:"position"`
-	Text     string `json:"text"`
+	ID       int64            `json:"id,string"`
+	Position int              `json:"position"`
+	Text     string           `json:"text"`
+	Media    []media.MediaDTO `json:"media"`
 }
 
 type SaveRequest struct {
@@ -53,6 +58,7 @@ type SaveRequest struct {
 	CategoryCode       string              `json:"categoryCode"`
 	Ingredients        []IngredientRequest `json:"ingredients"`
 	Steps              []StepRequest       `json:"steps"`
+	CoverMediaID       *string             `json:"coverMediaId"`
 }
 
 type IngredientRequest struct {
@@ -62,8 +68,9 @@ type IngredientRequest struct {
 }
 
 type StepRequest struct {
-	ID   *string `json:"id,omitempty"`
-	Text string  `json:"text"`
+	ID       *string  `json:"id,omitempty"`
+	Text     string   `json:"text"`
+	MediaIDs []string `json:"mediaIds"`
 }
 
 type ErrorResponse struct {
